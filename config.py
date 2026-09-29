@@ -41,10 +41,15 @@ LATENCY_CALIBRATION = os.path.join(SRC, "latency_distributions.json")
 DEVICE_CALIBRATION = os.path.join(VALIDATED, "device_calibration.json")
 
 
+# Optional tag to keep separate result trees side by side, e.g. one per
+# model in scripts/run_model_sweep.py (RESULTS_TAG=model_medium).
+RESULTS_TAG = os.environ.get("RESULTS_TAG", "")
+
+
 def results_dir(profile):
-    """All outputs of one profile live under results/<profile>/ so a smoke
-    run can never overwrite (or be mistaken for) a real run."""
-    return os.path.join(RESULTS, profile)
+    """All outputs of one profile live under results/<profile>[__<tag>]/ so
+    a smoke run can never overwrite (or be mistaken for) a real run."""
+    return os.path.join(RESULTS, f"{profile}__{RESULTS_TAG}" if RESULTS_TAG else profile)
 
 
 def ensure_dirs(profile=None):

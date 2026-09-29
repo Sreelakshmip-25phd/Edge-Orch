@@ -261,12 +261,14 @@ def load_intent_pools():
     ood = json.load(open(os.path.join(INTENT_DATA, "intent_ood_probe.json")))
     train, held, fixed = {}, {}, {}
     for st in SERVICE_TYPES:
-        if st in exp:
+        if st in CORE_TYPES:
             train[st] = list(exp[st][:3])
             held[st] = list(exp[st][3:])
         else:
+            # types unseen at t=0: every phrasing is held-out, even if the
+            # paraphrase script has since expanded them
             train[st] = []
-            held[st] = list(NEW_TYPE_TEMPLATES[st])
+            held[st] = list(dict.fromkeys(NEW_TYPE_TEMPLATES[st] + exp.get(st, [])))
         fixed[st] = [o["text"] for o in ood if o["service_type"] == st]
     return train, held, fixed
 

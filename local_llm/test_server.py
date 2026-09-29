@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Smoke-test a running local LLM server against the same style of
 prompt the harness actually sends (see GOA_DECIDE_SYS / SLM_SYSTEM in
-run_harness_final.py), and report tokens/sec so you can judge whether
+src/zone_agent.py), and report tokens/sec so you can judge whether
 the current hardware is fast enough for a real run.
 
 Usage:

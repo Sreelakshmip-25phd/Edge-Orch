@@ -7,9 +7,9 @@ before being added here — no invented paths).
 
 Each entry also carries:
   - "role": which MultiLLM role (see ../src/llm_client.py) it's suited
-    to — "slm" (fast intent compilation), "goa" (reasoning-heavy zone
-    selection/preemption), or "both". Only a suggestion; any tier can
-    still be pointed at either role via LOCAL_LLM_URL/_SLM/_GOA.
+    to — "slm" (fast intent translation), "llm" (reasoning-heavy zone
+    selection/pre-emption), or "both". Only a suggestion; any tier can
+    still be pointed at either role via LOCAL_LLM_URL/_SLM/_LLM.
   - "chat_format": the llama_cpp.server --chat_format value for this
     model family (start_server.py used to hardcode "qwen" for every
     tier, which only happened to work because all 3 original tiers were
@@ -57,7 +57,7 @@ MODELS = {
     "large": {
         "repo_id": "bartowski/Qwen2.5-14B-Instruct-GGUF",
         "filename": "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
-        "role": "goa",
+        "role": "llm",
         "chat_format": "qwen",
         "display_name": "Qwen2.5-14B-Instruct",
         "params_b": 14.0,
@@ -102,7 +102,7 @@ MODELS = {
     "mistral7b": {
         "repo_id": "bartowski/Mistral-7B-Instruct-v0.3-GGUF",
         "filename": "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
-        "role": "goa",
+        "role": "llm",
         "chat_format": "mistral-instruct",
         "no_system_role": True,
         "display_name": "Mistral-7B-Instruct-v0.3",
@@ -119,7 +119,7 @@ MODELS = {
     "gemma2_9b": {
         "repo_id": "bartowski/gemma-2-9b-it-GGUF",
         "filename": "gemma-2-9b-it-Q4_K_M.gguf",
-        "role": "goa",
+        "role": "llm",
         "chat_format": "gemma",
         "no_system_role": True,
         "display_name": "Gemma-2-9B-it",

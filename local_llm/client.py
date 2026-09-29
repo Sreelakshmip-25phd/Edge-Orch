@@ -1,8 +1,8 @@
 """Minimal client for the local LLM server, matching the request/response
-shape run_harness_final.py's MultiLLM already expects from any provider
+shape src/llm_client.py MultiLLM already expects from any provider
 (OpenAI-compatible /v1/chat/completions). Useful for quick manual checks;
 the harness itself talks to the server directly via the PROVIDERS list
-(see integrate_with_harness.py in this folder).
+(see src/llm_client.py).
 """
 import json
 import re

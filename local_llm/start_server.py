@@ -12,10 +12,10 @@ Usage:
     python3 start_server.py [small|medium|large] [--port 8080]
 
     # two concurrent servers - a small model for SLM (ZOA intent
-    # compilation) and a larger one for GOA (zone selection/preemption
-    # reasoning) - so MultiLLM(role="slm")/MultiLLM(role="goa") can each
+    # compilation) and a larger one for LLM role (global agent decisions
+    # reasoning) - so MultiLLM(role="slm")/MultiLLM(role="llm") can each
     # be pointed at a differently-sized model (see ../src/llm_client.py
-    # discover_providers(), LOCAL_LLM_URL_SLM / LOCAL_LLM_URL_GOA):
+    # discover_providers(), LOCAL_LLM_URL_SLM / LOCAL_LLM_URL_LLM):
     python3 start_server.py llama32_3b --port 8080 \\
         --also mistral7b --also-port 8081
 
@@ -132,7 +132,7 @@ def main():
     print(f"  [{args.also}] :{also_port} ->", " ".join(cmd2))
     print(f"point the pipeline at them with:\n"
           f"  export LOCAL_LLM_URL_SLM=http://{args.host}:{args.port}\n"
-          f"  export LOCAL_LLM_URL_GOA=http://{args.host}:{also_port}\n"
+          f"  export LOCAL_LLM_URL_LLM=http://{args.host}:{also_port}\n"
           f"(role assignment is just a suggestion here — pick whichever "
           f"port matches the smaller/larger of the two tiers you chose)")
     procs = [subprocess.Popen(cmd1), subprocess.Popen(cmd2)]
