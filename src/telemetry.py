@@ -42,6 +42,7 @@ TERMINAL_STATES = ("COMPLETED", "DISPLACED", "REJECTED")
 ACTIONS = ("place", "preempt", "degrade", "reject")
 CALL_SOURCES = ("fresh", "cached_disk", "error")
 ROLES = ("slm", "llm")
+INTERRUPTION_NOTES = ("preempted", "node_failure", "migrated", "replanned")
 END_CAUSES = ("completed", "rejected", "node_loss", "preempt_unmigrated")
 
 # Latency components (ms). transport_in + translation + escalation +
@@ -218,9 +219,11 @@ class Telemetry:
             raise ValueError(f"{req_id} already finalized")
         rec.state = state
         rec.transitions.append([round(t, 3), state, note])
-        if note in ("preempted", "node_failure"):
+        # every non-arrival (re)placement or loss is an interruption of a
+        # running service; a successful re-placement is a migration
+        if note in INTERRUPTION_NOTES:
             rec.n_interruptions += 1
-        if note == "migrated":
+        if note in ("migrated", "replanned"):
             rec.n_migrations += 1
         self._cum[f"state_{state}"] += 1
 

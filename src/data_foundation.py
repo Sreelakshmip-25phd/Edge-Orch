@@ -570,6 +570,14 @@ class FailureModel:
         return kept
 
 
+# Shape-compatible stand-in used ONLY by smoke runs/tests when the real
+# failure_model.json isn't present. Values are illustrative, not data.
+SYNTHETIC_FAILURE_MODEL = {
+    "interfailure_hours_pct": {"5": 0.5, "25": 3.0, "50": 20.0, "75": 60.0, "95": 200.0},
+    "downtime_min_pct": {"5": 1.0, "25": 5.0, "50": 15.0, "75": 60.0, "95": 300.0},
+    "mtbf_hours": 50.0, "mttr_minutes": 40.0, "source": "SYNTHETIC (smoke/tests only)"}
+
+
 def sample_failures(n, rng, model=None):
     """Module-level convenience: n (interfailure_s, downtime_s) samples."""
     return (model or FailureModel.load()).sample_failures(n, rng)

@@ -49,11 +49,10 @@ def test_every_transition_captured():
     _req(tel)
     rec = tel.requests["r1"]
     tel.transition("r1", 1.0, "PLACED", "arrival")
-    tel.transition("r1", 9.0, "PLACED", "preempted")
-    tel.transition("r1", 9.0, "PLACED", "migrated")
+    tel.transition("r1", 9.0, "PLACED", "migrated")        # after a pre-emption
     tel.transition("r1", 20.0, "DISPLACED", "node_failure")
     states = [s for _, s, _ in rec.transitions]
-    assert states == ["REQUESTED", "PLACED", "PLACED", "PLACED", "DISPLACED"]
+    assert states == ["REQUESTED", "PLACED", "PLACED", "DISPLACED"]
     assert rec.n_interruptions == 2 and rec.n_migrations == 1
     assert rec.accepted
 
