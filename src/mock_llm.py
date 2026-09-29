@@ -13,7 +13,6 @@ metadata, and live under results/smoke/.
 """
 import hashlib
 import json
-import math
 import re
 
 # PLACEHOLDER latencies (ms) - NOT measured. Real numbers come from

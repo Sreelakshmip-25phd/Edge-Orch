@@ -168,7 +168,9 @@ class AgentEdgeBaseline:
         except LLMUnavailable:
             dec, src = None, None
         if dec is None:
-            dec = Decision(node=None, path="unresolved", decision_source="llm_fresh",
+            dec = Decision(node=None, path="unresolved",
+                           decision_source={"fresh": "llm_fresh",
+                                            "cached_disk": "llm_cached_disk"}.get(src, "none"),
                            action="reject", demand=demand, profile=prof)
         return finish_decision(rec, dec, req.zone_id)
 
