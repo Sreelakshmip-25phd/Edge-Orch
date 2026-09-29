@@ -1,0 +1,35 @@
+# Generated outputs - reproducible by running the pipeline, not source.
+results/
+!results/.gitkeep
+
+# Real datasets: large, and re-acquirable via src/data_foundation.py
+# (or `--import-from` an existing checkout that already has them).
+data_foundation/raw/*
+data_foundation/validated/*
+data_foundation/reports/*
+!data_foundation/raw/.gitkeep
+!data_foundation/validated/.gitkeep
+!data_foundation/reports/.gitkeep
+
+# LLM response disk caches (runtime artifacts)
+cache/
+local_llm/compare_cache_*.json
+
+# Model weights - never commit, re-downloadable via local_llm/download_model.py
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.onnx
+local_llm/.cache/
+
+# Python / tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Logs
+*.log

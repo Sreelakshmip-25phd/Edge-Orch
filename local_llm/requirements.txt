@@ -1,0 +1,6 @@
+# Base install (CPU-only). On a CUDA-capable machine, don't use this file
+# directly for llama-cpp-python — see README.md "GPU setup" for the
+# CMAKE_ARGS build that enables GPU offload instead.
+huggingface_hub>=0.24
+llama-cpp-python[server]>=0.3.0
+requests>=2.31

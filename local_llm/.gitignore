@@ -1,0 +1,23 @@
+# Model weights are large (GB-scale) and reproducibly re-downloadable
+# via download_model.py — never commit them.
+*.gguf
+*.bin
+*.safetensors
+
+# huggingface_hub's local cache/lock files
+.cache/
+*.lock
+
+# model_compare.py's per-model call cache (runtime artifact, not source
+# — same convention as zoa/*.json and goa/*.json at the project root)
+compare_cache_*.json
+
+# runtime logs
+server.log
+*.log
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/

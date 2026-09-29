@@ -1,0 +1,16 @@
+# Core pipeline (tested on Python 3.8+)
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10          # stats (CIs, paired tests) + HiGHS MILP/LP for the optional offline bound
+scikit-learn>=1.3    # KMeans zoning, TF-IDF embedder fallback
+sentence-transformers>=2.2   # all-MiniLM-L6-v2 intent embeddings
+matplotlib>=3.7
+requests>=2.31
+pyarrow>=14.0        # milan_activity.parquet
+
+# Tests
+pytest>=7.0
+
+# Optional: OR-Tools CP-SAT for the exact offline ILP bound on larger batches
+# (src/baselines/optimal_solver.py falls back to scipy/HiGHS without it)
+# ortools>=9.8
