@@ -231,6 +231,7 @@ class EdgeSimulation:
         self.digests, self._prev = {}, {z: 0.0 for z in self.zone_ids}
         self._pending = 0
         self.probe_count = 0
+        self.oracle_calls = 0
         self.peak_util = 0.0
         if hasattr(orch, "attach"):
             orch.attach(self, latency)
@@ -274,6 +275,14 @@ class EdgeSimulation:
     def manifest(self, req_id, resolved_type):
         r = self.truth.get(req_id)
         return self.manifests.demand(req_id, resolved_type, r["truth"] if r else None)
+
+    def oracle_profile(self, req_id):
+        """Ground-truth profile. ONLY for baselines that declare
+        `oracle = True` (greedy_oracle: a placement-policy reference that is
+        handed perfect, free translation). Every use is counted."""
+        self.oracle_calls += 1
+        tr = self.truth[req_id]["truth"]
+        return {f: tr[f] for f in ("service_type", "latency_class", "data_locality", "priority")}
 
     def rtt(self, a, b):
         from scenario import rtt

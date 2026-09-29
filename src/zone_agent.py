@@ -88,8 +88,14 @@ class IntentLibrary:
         self.M = None
         self._tick = 0
         self.evictions = 0
-        for t, p in seed_entries:
-            self.add(t, p)
+        seed_entries = list(seed_entries)
+        if seed_entries:
+            embedder.warm([t for t, _ in seed_entries])
+            self.texts = [t for t, _ in seed_entries][-self.cap:]
+            self.profiles = [dict(p) for _, p in seed_entries][-self.cap:]
+            self.last_used = list(range(len(self.texts)))
+            self._tick = len(self.texts)
+            self.M = embedder.encode(self.texts)
 
     def __len__(self):
         return len(self.texts)
