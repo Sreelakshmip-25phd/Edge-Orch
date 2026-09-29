@@ -119,7 +119,8 @@ class HierarchicalOrchestrator:
         return self.global_.escalate(t, view, req.req_id, origin, prof, demand,
                                      self._allowed(origin, prof), rec,
                                      policies=self._policies(),
-                                     charge_hop=self.use_zone_tier)
+                                     charge_hop=self.use_zone_tier,
+                                     tried_local=self.use_zone_tier)
 
     def replan(self, t, svc, scratch, reason=""):
         view, origin = self.view, svc.origin_zone
@@ -131,7 +132,8 @@ class HierarchicalOrchestrator:
                                 demand=demand, profile=prof)
         return self.global_.escalate(t, view, svc.req_id, origin, prof, demand,
                                      self._allowed(origin, prof), scratch,
-                                     policies=self._policies(), charge_hop=True)
+                                     policies=self._policies(), charge_hop=True,
+                                     tried_local=self.use_zone_tier)
 
     # --- ticks / events --------------------------------------------------------
     def on_digest_tick(self, t, digests):

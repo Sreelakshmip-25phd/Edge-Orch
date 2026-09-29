@@ -6,6 +6,15 @@ and `pytest` all resolve the same directories regardless of cwd.
 import os
 import sys
 
+# The simulator does many tiny mat-vec products (cache lookups, digests).
+# On many-core hosts, BLAS/OpenMP thread pools make each one *slower*
+# (oversubscription). Cap them unless the user already chose. Must run
+# before numpy is first imported - config is imported first everywhere.
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+           "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_v, "4")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(BASE, "src")
 for _p in (BASE, SRC):

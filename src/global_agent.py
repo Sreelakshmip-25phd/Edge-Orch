@@ -161,6 +161,8 @@ class GlobalAgent:
         self.mem, self.proc = CaseMemory(), ProceduralStore()
         self.digests = {}
         self.counters = Counter()
+        self._skip_place = set()
+        self._no_options = False
 
     # --- cluster-state inputs -----------------------------------------------
     def on_digest_tick(self, t, digests):
@@ -181,8 +183,13 @@ class GlobalAgent:
 
     # --- main entry ---------------------------------------------------------
     def escalate(self, t, view, rid, origin, profile, demand, allowed, rec,
-                 policies=None, charge_hop=True):
+                 policies=None, charge_hop=True, tried_local=False):
+        """tried_local: the zone agent just failed a *live* full-size solve
+        in `origin`, so a full-size placement there is not re-offered
+        (a digest may be up to DIGEST_S stale); pre-emption / degradation
+        in the origin zone remain possible."""
         policies = policies or {}
+        self._skip_place = {origin} if tried_local else set()
         self.counters["escalations"] += 1
         if charge_hop:
             rec.add_latency("escalation", view.zone_to_global_ms(origin))
@@ -234,6 +241,8 @@ class GlobalAgent:
         rec.add_latency("decision", ms)
         for c in cands:
             zone, level = c["zone"], c.get("level", 1.0) or 1.0
+            if c["action"] == "place" and zone in self._skip_place:
+                continue
             want = {**demand, "cpu": demand["cpu"] * level, "mem": demand["mem"] * level} \
                 if c["action"] == "degrade" else demand
             if self.use_digest and c["action"] != "preempt":
@@ -278,7 +287,7 @@ class GlobalAgent:
         if not rule:
             return None
         zone = rule["action"]["prefer_zone"]
-        if zone not in allowed or self.mem.is_negative(key, zone, t):
+        if zone not in allowed or zone in self._skip_place or self.mem.is_negative(key, zone, t):
             return None
         if self.use_digest:
             d = self._fresh_digest(zone, t)
@@ -298,6 +307,8 @@ class GlobalAgent:
         def scan():
             c = []
             for z in allowed:
+                if z in self._skip_place:
+                    continue
                 d = self._fresh_digest(z, t)
                 if d is not None and digest_fits(d, demand) and \
                         not self.mem.is_negative(key, z, t):
@@ -349,7 +360,7 @@ class GlobalAgent:
                 d = self._fresh_digest(z, t)
                 if d is None:
                     continue
-                if digest_fits(d, demand):
+                if digest_fits(d, demand) and z not in self._skip_place:
                     place.append(z)
                 elif self.use_pd:
                     for lvl in DEGRADE_LEVELS:
@@ -357,7 +368,8 @@ class GlobalAgent:
                                 d, {"cpu": demand["cpu"] * lvl, "mem": demand["mem"] * lvl}):
                             degrade.append({"zone": z, "level": lvl})
             else:
-                place.append(z)                  # blind: capacity unknown without digests
+                if z not in self._skip_place:
+                    place.append(z)              # blind: capacity unknown without digests
                 if self.use_pd:
                     degrade += [{"zone": z, "level": lvl} for lvl in DEGRADE_LEVELS
                                 if lvl + 1e-9 >= floor]
@@ -475,7 +487,7 @@ class GlobalAgent:
         probed = set()
         if not self.use_digest:
             # no digests: the chain has to probe blind, nearest first
-            for z in near[:MAX_XZ_CAND + 1]:
+            for z in [z for z in near if z not in self._skip_place][:MAX_XZ_CAND + 1]:
                 probed.add(z)
                 nid = self._probe(view, rec, z, demand, profile, pol.get(z))
                 if nid:
