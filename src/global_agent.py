@@ -39,6 +39,8 @@ DEGRADE_LEVELS = (0.8, 0.6, 0.4)          # 1.0 = no degradation
 MAX_XZ_CAND = 3                          # digest-scan probes per escalation
 MAX_PREEMPT_OPTIONS = 6
 MAX_PLACE_OPTIONS = 6
+MAX_FEAS_ZONES = 4                        # zones checked in the pre-verification round trip
+MEMORY_CANDIDATES = 3                     # remembered cases tried per escalation
 PREEMPT_MIN_PRIORITY = "high"            # only high/critical requests may pre-empt
 RULE_MIN_EPS, RULE_MIN_FRAC = 5, 0.6
 EPISODIC_PER_KEY = 10
@@ -163,6 +165,7 @@ class GlobalAgent:
         self.counters = Counter()
         self._skip_place = set()
         self._no_options = False
+        self._opt_nodes = {}
 
     # --- cluster-state inputs -----------------------------------------------
     def on_digest_tick(self, t, digests):
@@ -237,7 +240,7 @@ class GlobalAgent:
     def _from_memory(self, t, view, rid, origin, profile, demand, allowed, rec, key, pol):
         if not self.use_memory:
             return None
-        cands, ms = measure(self.mem.candidates, key, allowed, t)
+        cands, ms = measure(self.mem.candidates, key, allowed, t, MEMORY_CANDIDATES)
         rec.add_latency("decision", ms)
         for c in cands:
             zone, level = c["zone"], c.get("level", 1.0) or 1.0
@@ -328,13 +331,14 @@ class GlobalAgent:
         return self.use_pd and PRIORITY_RANK.get(profile.get("priority"), 1) >= \
             PRIORITY_RANK[PREEMPT_MIN_PRIORITY]
 
-    def _victims(self, view, rec, zones, profile, demand, max_priority=None):
+    def _victims(self, view, rec, zones, profile, demand, max_priority=None, charge=True):
         """Running, strictly-lower-priority services whose eviction alone
         frees enough room on their node. Querying a zone's running list is
         a round trip; zones are queried in parallel (max RTT charged)."""
         if not zones:
             return []
-        rec.add_latency("escalation", max(view.zone_to_global_ms(z) for z in zones))
+        if charge:
+            rec.add_latency("escalation", max(view.zone_to_global_ms(z) for z in zones))
         pr = PRIORITY_RANK.get(profile.get("priority"), 1)
         cap = PRIORITY_RANK.get(max_priority, 99) if max_priority else 99
         out = []
@@ -352,30 +356,53 @@ class GlobalAgent:
         return vs[0] if vs else None
 
     def _options(self, t, view, rec, origin, profile, demand, allowed, key):
+        """Options offered to the LLM, *pre-verified*: one parallel feasibility
+        round trip to the nearest promising zones asks each zone's solver
+        whether the request fits at full size, else at the highest degradation
+        level the service allows, and (for high/critical requests) which lower-
+        priority running services could be evicted. The LLM therefore only
+        chooses among actions that are feasible right now, so a failed
+        verification means a genuine model error, not a stale digest."""
         near = sorted(allowed, key=lambda z: view.rtt(origin, z))
-        place, degrade = [], []
         floor = self.catalog.degrade_floor(profile.get("service_type"))
+        levels = [1.0] + [l for l in DEGRADE_LEVELS if l + 1e-9 >= floor] if self.use_pd else [1.0]
+        lowest = {"cpu": demand["cpu"] * levels[-1], "mem": demand["mem"] * levels[-1]}
+        cand = []
         for z in near:
             if self.use_digest:
                 d = self._fresh_digest(z, t)
-                if d is None:
-                    continue
-                if digest_fits(d, demand) and z not in self._skip_place:
-                    place.append(z)
-                elif self.use_pd:
-                    for lvl in DEGRADE_LEVELS:
-                        if lvl + 1e-9 >= floor and digest_fits(
-                                d, {"cpu": demand["cpu"] * lvl, "mem": demand["mem"] * lvl}):
+                if d is None or not digest_fits(d, lowest):
+                    continue                     # not even the smallest level can fit
+            cand.append(z)
+            if len(cand) >= MAX_FEAS_ZONES:
+                break
+        want_victims = self._preempt_allowed(profile)
+        victim_zones = near[:4] if want_victims else []
+        queried = list(dict.fromkeys(cand + victim_zones))
+        if queried:                              # one parallel round trip
+            rec.add_latency("escalation", max(view.zone_to_global_ms(z) for z in queried))
+        self._opt_nodes = {}
+        place, degrade = [], []
+
+        def feasibility():
+            for z in cand:
+                self.counters["probes"] += 1
+                for lvl in levels:
+                    if lvl == 1.0 and z in self._skip_place:
+                        continue
+                    want = {**demand, "cpu": demand["cpu"] * lvl, "mem": demand["mem"] * lvl}
+                    nid = view.solve(z, want, profile)
+                    if nid is not None:
+                        if lvl == 1.0:
+                            place.append(z)
+                        else:
                             degrade.append({"zone": z, "level": lvl})
-            else:
-                if z not in self._skip_place:
-                    place.append(z)              # blind: capacity unknown without digests
-                if self.use_pd:
-                    degrade += [{"zone": z, "level": lvl} for lvl in DEGRADE_LEVELS
-                                if lvl + 1e-9 >= floor]
-        preempt = []
-        if self._preempt_allowed(profile):
-            preempt = self._victims(view, rec, near[:4], profile, demand)[:MAX_PREEMPT_OPTIONS]
+                        self._opt_nodes[(z, lvl)] = nid
+                        break                    # lower levels are dominated
+        _, ms = measure(feasibility)
+        rec.add_latency("decision", ms)
+        preempt = self._victims(view, rec, victim_zones, profile, demand,
+                                charge=False)[:MAX_PREEMPT_OPTIONS] if want_victims else []
         return {"place": place[:MAX_PLACE_OPTIONS],
                 "preempt": [{"victim": v["req_id"], "zone": v["zone"], "node": v["node"],
                              "priority": v["priority"], "service_type": v["service_type"],
@@ -410,8 +437,8 @@ class GlobalAgent:
             z = out.get("zone")
             if z not in options["place"]:
                 return None, f"zone {z!r} is not in options.place"
-            nid = self._probe(view, rec, z, demand, profile, pol.get(z))
-            if nid is None:
+            nid = self._opt_nodes.get((z, 1.0))
+            if nid is None or not view.node_fits_after_evict(nid, [], demand):
                 return None, f"zone {z} has no node that fits cpu={demand['cpu']:.2f} mem={demand['mem']:.2f}"
             return self._dec(view, nid, "llm", "llm", profile, demand), ""
         if a == "preempt":
@@ -433,8 +460,9 @@ class GlobalAgent:
             if not ok:
                 return None, f"(zone={z}, level={lvl}) is not in options.degrade"
             want = {**demand, "cpu": demand["cpu"] * lvl, "mem": demand["mem"] * lvl}
-            nid = self._probe(view, rec, z, want, profile, pol.get(z))
-            if nid is None:
+            nid = next((n for (zz, l), n in self._opt_nodes.items()
+                        if zz == z and abs(l - lvl) < 1e-6), None)
+            if nid is None or not view.node_fits_after_evict(nid, [], want):
                 return None, f"zone {z} cannot fit the request even at level {lvl}"
             return self._dec(view, nid, "llm_degraded", "llm", profile, demand,
                              action="degrade", level=lvl), ""

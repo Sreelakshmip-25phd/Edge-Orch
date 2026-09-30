@@ -50,15 +50,29 @@ def test_shadow_check_flags_and_repairs_wrong_cached_translation():
     slm = ScriptedLLM("slm", script={"shadow_check": [dict(VA)]})
     text = "analyse stadium camera feeds in real time"
     za = _agent(slm, threshold=0.8, shadow_rate=1.0, seed_entries=[(text, wrong)])
+    near = text + " please"                                   # a near-match, not exact
     tel = Telemetry()
-    r = _rec(tel, "r1", text)
-    used = za.translate(0.0, "r1", text, r)
+    r = _rec(tel, "r1", near)
+    used = za.translate(0.0, "r1", near, r)
     assert used["service_type"] == "iot_aggregator"          # the request used the cache...
     assert r.shadow_checked and r.shadow_agree is False      # ...the audit disagreed
     assert za.counters["shadow_disagree"] == 1
-    r2 = _rec(tel, "r2", text)
+    r2 = _rec(tel, "r2", near)
     za.shadow_rate = 0.0
-    assert za.translate(1.0, "r2", text, r2)["service_type"] == "video_analytics"   # repaired
+    assert za.translate(1.0, "r2", near, r2)["service_type"] == "video_analytics"   # repaired
+
+
+def test_exact_repeats_are_not_audited_and_trust_decays_audits():
+    slm = ScriptedLLM("slm", default=lambda k, s, u: dict(VA))
+    text = "analyse stadium camera feeds in real time"
+    za = _agent(slm, threshold=0.8, shadow_rate=1.0, seed_entries=[(text, VA)])
+    tel = Telemetry()
+    za.translate(0.0, "r0", text, _rec(tel, "r0", text))
+    assert za.counters["shadow_checks"] == 0                  # exact repeat: nothing to audit
+    for i, extra in enumerate(("now", "today", "asap"), start=1):   # near-matches build trust
+        near = f"{text} {extra}"
+        za.translate(float(i), f"r{i}", near, _rec(tel, f"r{i}", near))
+    assert za.lib.trust[0] >= 2
 
 
 def test_lru_cap_evicts_least_recently_used():

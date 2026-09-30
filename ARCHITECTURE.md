@@ -146,12 +146,21 @@ metadata as `latency_source`:
   wall time. This is real but host-dependent.
 - **`placeholder`**: mock LLM, smoke runs only.
 
-**Status:** the calibration file has **not** been measured yet; this repo was
-written on a machine without a GPU or model server.
+**Status:** measured on the GPU machine with `scripts/calibrate_latency.py`.
+It must be committed from there so every run and every parallel shard samples
+the same distributions; this repo was written on a machine without a GPU.
 
 Capacity is reserved at decision time. Setup latency is reported, but it does
 not delay the service start in the simulation, because setup latency (ms–s)
 is small next to service lifetimes (minutes–hours).
+
+Only the **arrival** placement's container start counts towards a request's
+latency. When a running service is re-placed (migration after pre-emption,
+recovery after a node failure), that deployment draw is recorded on the
+`migrate` event as `redeploy_ms`, together with the re-planning latency, and
+does not change the original request's breakdown. (Fixed after the first GPU
+seeds: earlier code charged every re-placement's deployment to the original
+request, slightly inflating total latency for interrupted services.)
 
 ## 5. Tier 2 details
 
@@ -179,10 +188,19 @@ is small next to service lifetimes (minutes–hours).
   The old 0.3 threshold looked perfect only because the old evaluation never
   offered an unseen type. It would silently map every new service onto a
   known one.
-- **Shadow check.** A random 5% of cache hits are re-translated by the SLM in
-  the background. If it disagrees, the cache entry is replaced. This costs
-  tokens (charged to that request) but not request latency. Its disagreement
-  rate is a metric.
+- **Shadow check (trust-based).** Cache hits are re-translated by the SLM in
+  the background at 5%. If it disagrees, the cache entry is replaced. This
+  costs tokens (charged to that request) but not request latency, and its
+  disagreement rate is a metric. Two refinements stop audits from becoming a
+  permanent floor of SLM calls:
+  - an **exact repeat** of text the SLM itself translated is never audited:
+    at temperature 0 the SLM would give the same answer, so there is nothing
+    to catch;
+  - an entry that has **passed 2 audits** is trusted and re-audited at 10% of
+    the base rate. Any disagreement resets it to full auditing.
+
+  On the real seed-0 workload, this cut audits by 29% (546 → 390) with the
+  audit disagreement rate unchanged.
 - **Open vocabulary.** The SLM prompt lists the *live* catalog and allows a
   new snake_case label. The label is resolved as exact, then nearest
   registered type by embedding (≥ 0.55), then `novel:<label>` with a generic
@@ -195,7 +213,8 @@ is small next to service lifetimes (minutes–hours).
   log₂ CPU bucket, origin zone). A case stores the chosen zone, node, action,
   degradation level, victim priority, the free CPU seen, and the time.
   Retrieval is exact key first, then similar keys (same type / latency /
-  priority, CPU bucket ±1, any origin).
+  priority, CPU bucket ±1, any origin). Up to 3 remembered cases are tried
+  per escalation.
 - **Re-check before reuse.** A case is only reused if the live digest still
   shows a node that fits (or, with digests off, a probe succeeds). Otherwise
   it is counted `memory_stale` and skipped.
@@ -214,22 +233,53 @@ is small next to service lifetimes (minutes–hours).
 - **One structured LLM call.** The prompt carries the request profile and
   size, per-zone digest summaries and RTTs, and an explicit options block:
 
-  - `place`: zones whose digest fits;
+  - `place`: zones where the request fits at full size;
   - `preempt`: strictly-lower-priority running services whose eviction alone
     frees enough room; only for high/critical requests; up to 6;
-  - `degrade`: (zone, level) for levels in {0.8, 0.6, 0.4} at or above the
-    service type's floor. The floors are drone 0.8; video / AR / twin /
-    crowd 0.6; others 0.4.
+  - `degrade`: (zone, level) with the *highest* level in {0.8, 0.6, 0.4} that
+    fits, at or above the service type's floor (lower levels are dominated).
+    The floors are drone 0.8; video / AR / twin / crowd 0.6; others 0.4.
 
-  The answer is verified by probing the solver. On failure there is one retry
-  with the verifier's error as feedback, then the rule chain takes over. The
-  LLM is not called at all when there are no options.
+  **Options are pre-verified.** One parallel round trip to the nearest
+  promising zones (up to 4; one `zone_to_global_ms`, the max over the queried
+  zones) asks each zone's solver whether the request fits at full size, else
+  at which degradation level. The same round trip collects pre-emption
+  candidates. The LLM therefore only chooses among actions that are feasible
+  at that instant. (Earlier, options came from digests up to 5 s old: on the
+  real seed-0 workload a third of LLM decisions, 548 of 1,693, failed
+  verification and cost a second call. With pre-verification, failed
+  verifications fell to the injected error rate of the test model and total
+  decision calls fell 27%.)
+
+  The chosen action is re-checked at the same instant. On failure there is one
+  retry with the verifier's error as feedback, then the rule chain takes
+  over. The LLM is not called at all when there are no options.
 - **Pre-emption and migration.** The victim is evicted first. The request
   takes the freed capacity. The victim then goes through the same `replan()`
   path as failure recovery (local, then escalate), which may itself pre-empt
   further (depth ≤ 3). If this fails, the victim ends `preempt_unmigrated`.
   Re-planning uses a scratch record, so its cost never pollutes the original
   request's arrival latency, while its LLM calls and tokens still count.
+
+### Measuring "model calls fall over time"
+
+Raw SLM+LLM invocations **per request** follow the daily load curve. At
+night the zones are nearly empty and almost nothing escalates; in the day
+up to ~60% of requests escalate. On the first real GPU seeds, per-request
+usage roughly doubled from the first to the last quarter of the day (about
+0.15 → 0.35) while the need for model calls grew even faster. Changing the
+workload to hide that would be rigging it, so the claim is measured in
+three need-normalised ways instead (all from the same telemetry):
+
+| measure | what falls if the claim holds |
+|---|---|
+| `cache_miss_first/last_quarter` | share of requests the cache can't translate |
+| `llm_per_escalation_*` (incl. busy-hours halves, slope) | LLM calls needed per escalation |
+| `tables/savings_vs_ablations*.csv`, `fig_savings_vs_ablations.png` | share of invocations the full system saves vs `no_memory`, `no_intent_cache`, `memory_ablated`, `no_digest` on the *same* workload, hour by hour, paired by seed |
+
+The third is the causal evidence: if memory and the cache matter, the
+savings are positive and grow as they fill. The raw per-request curve is
+still reported next to them.
 
 ## 7. Ablations (`src/ablations.py`)
 
@@ -304,7 +354,7 @@ bracketed and bisected until `greedy_oracle` acceptance on seed 0 is in
   built on. Mapping them onto the Milan grid would mix two unrelated spatial
   processes, so the Milan-derived approximation was kept deliberately. No web
   search was done while writing this repo.
-- **SLM/LLM latency**: see §4. It is not yet measured; the script is
+- **SLM/LLM latency**: see §4. Measured on the GPU machine; the script is
   provided.
 - **Resource request known at placement** (manifest assumption, §1), and
   **degraded services keep their lifetime** (running at reduced resources
@@ -353,7 +403,32 @@ Also fixed along the way: coarse LLM disk-cache keys (the old
 prompt; now the full prompt is hashed), and quadratic cache writes (now
 append-only JSONL).
 
-## 13. Known limitations
+## 13. Running the campaign in parallel
+
+llama-cpp-python's server answers one request at a time, so wall time is
+dominated by sequential model calls. `scripts/run_parallel.py` starts N
+independent SLM+LLM server pairs and N evaluator shards
+(`evaluator.py --shard i/N`, interleaved (system, seed) jobs).
+
+This changes run time only, never results:
+- each (system, seed) run is an independent simulation with its own seeded
+  RNGs and its own LLM disk cache (`cache/<profile>/<system>/seed<k>/`);
+- with calibrated latency, simulated latency is sampled, not measured, so
+  contention between servers cannot leak into results. The script refuses to
+  run in `live` latency mode unless explicitly allowed.
+
+Checked on the smoke profile: two shards against a sequential run gave
+identical values for all 1,358 non-latency metric means. The latency
+components that time deterministic compute with `perf_counter` differ in
+the last digits, as they do between any two runs.
+
+Baselines run cheapest first (greedy, rule-based, CORE, ReAct, AgentEdge,
+LATS), so a partially finished campaign always holds the most important
+comparisons. All systems keep all 10 seeds: the paired Wilcoxon test cannot
+reach p < 0.05 with fewer than 6 pairs, so cutting seeds for the expensive
+baselines would weaken exactly the comparisons that need to be defended.
+
+## 14. Known limitations
 
 - Services do not follow their user when the device moves. Mobility affects
   only where new requests originate.

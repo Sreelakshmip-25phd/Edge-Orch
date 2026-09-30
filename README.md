@@ -62,12 +62,24 @@ python scripts/run_model_sweep.py --tiers small,medium,large,llama32_1b,llama32_
 
 ### Latency calibration status
 
-`src/latency_distributions.json` is **not yet measured**. Run
-`scripts/calibrate_latency.py` on the GPU machine and commit the file.
+`src/latency_distributions.json` is measured on the GPU machine by
+`scripts/calibrate_latency.py`; commit it from there. Without it, real runs
+charge each SLM/LLM call its own measured wall time (`latency_source: live`
+in every run's metadata), and `scripts/run_parallel.py` refuses to start.
+Nothing in this repo ships an invented latency distribution.
 
-Until then, real runs charge each SLM/LLM call its own measured wall time
-(`latency_source: live` in every run's metadata). Nothing in this repo ships
-an invented latency distribution.
+### Running the campaign faster (same results)
+
+```bash
+python scripts/run_parallel.py --workers 3 --slm llama32_3b --llm medium --dry-run   # plan
+python scripts/run_parallel.py --workers 3 --slm llama32_3b --llm medium
+```
+
+This starts N independent SLM+LLM server pairs and N evaluator shards; pick N
+so N copies of both models fit in GPU memory. Results are identical to a
+sequential run (ARCHITECTURE.md §13). Progress: `results/full/logs/shard*.log`.
+Interrupting is safe: finished (system, seed) runs are kept, unfinished ones
+restart from scratch next time.
 
 ## Useful commands
 

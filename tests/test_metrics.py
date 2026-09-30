@@ -64,3 +64,24 @@ def test_fresh_and_cached_disk_calls_reported_separately():
     S = metrics.compute(tel, n_bins=4)["scalars"]
     assert S["calls_slm_fresh"] == 1 and S["calls_slm_cached_disk"] == 1
     assert S["fresh_calls_per_req"] == 1.0 and S["invocations_per_req"] == 2.0
+
+
+def test_need_normalised_call_metrics():
+    tel = Telemetry({"horizon_s": 100.0})
+    # early: one escalation needing 2 LLM calls; late: two escalations, 1 call in total
+    for rid, t, esc, calls in (("r1", 5, True, 2), ("r2", 90, True, 1), ("r3", 95, True, 0)):
+        _r(tel, rid, t, esc, "completed")
+        for _ in range(calls):
+            tel.log_llm_call(req_id=rid, agent="g", role="llm", kind="decide", source="fresh")
+    S = metrics.compute(tel, n_bins=4)["scalars"]
+    assert S["llm_per_escalation_first_quarter"] == pytest.approx(2.0)
+    assert S["llm_per_escalation_last_quarter"] == pytest.approx(0.5)
+    assert S["llm_per_escalation"] == pytest.approx(1.0)
+
+
+def test_shards_partition_jobs_exactly():
+    import evaluator as E  # noqa: F401  (import check)
+    jobs = [(s, k) for s in ("full", "react", "lats") for k in range(10)]
+    parts = [[j for i, j in enumerate(jobs) if i % 3 == si] for si in range(3)]
+    assert sorted(sum(parts, [])) == sorted(jobs)
+    assert all(abs(len(p) - len(jobs) / 3) <= 1 for p in parts)

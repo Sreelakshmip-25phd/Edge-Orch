@@ -26,6 +26,9 @@ from latency_model import measure
 from llm_client import LLMUnavailable
 from scenario import LATENCY_CLASSES, LOCALITIES, PRIORITIES, PROFILE_FIELDS
 
+TRUST_AFTER = 2                 # audits passed before an entry counts as trusted
+TRUSTED_AUDIT_FACTOR = 0.1      # trusted entries are audited at 10% of the base rate
+
 GENERIC_NOVEL = {"latency_class": "interactive", "data_locality": "any",
                  "priority": "normal"}
 
@@ -85,6 +88,7 @@ class IntentLibrary:
     def __init__(self, embedder, threshold, cap=500, seed_entries=()):
         self.emb, self.threshold, self.cap = embedder, float(threshold), int(cap)
         self.texts, self.profiles, self.last_used = [], [], []
+        self.trust = []          # shadow-audit agreements since the entry was (re)written
         self.M = None
         self._tick = 0
         self.evictions = 0
@@ -94,6 +98,7 @@ class IntentLibrary:
             self.texts = [t for t, _ in seed_entries][-self.cap:]
             self.profiles = [dict(p) for _, p in seed_entries][-self.cap:]
             self.last_used = list(range(len(self.texts)))
+            self.trust = [0] * len(self.texts)
             self._tick = len(self.texts)
             self.M = embedder.encode(self.texts)
 
@@ -118,16 +123,19 @@ class IntentLibrary:
         if len(self.texts) >= self.cap:
             j = int(np.argmin(self.last_used))
             self.texts[j], self.profiles[j], self.last_used[j] = text, dict(profile), self._tick
+            self.trust[j] = 0
             self.M[j] = v[0]
             self.evictions += 1
             return
         self.texts.append(text)
         self.profiles.append(dict(profile))
         self.last_used.append(self._tick)
+        self.trust.append(0)
         self.M = v if self.M is None else np.vstack([self.M, v])
 
     def replace(self, idx, profile):
         self.profiles[idx] = dict(profile)
+        self.trust[idx] = 0
 
 
 def slm_system_prompt(catalog):
@@ -208,7 +216,15 @@ class ZoneAgent:
                 rec.translation_source = "cache"
                 rec.type_resolution = "cache"
                 rec.add_latency("translation", lat)
-                if self.rng.uniform() < self.shadow_rate:
+                # trust-based auditing: an entry that has passed TRUST_AFTER
+                # audits is re-audited at a residual rate only (a disagreement
+                # resets it to full auditing)
+                # an exact repeat of text the SLM itself translated can't be a
+                # similarity error, so only near-matches are audited
+                exact = self.lib.texts[idx] == text
+                rate = 0.0 if exact else (self.shadow_rate if self.lib.trust[idx] < TRUST_AFTER
+                                          else self.shadow_rate * TRUSTED_AUDIT_FACTOR)
+                if rate and self.rng.uniform() < rate:
                     self._shadow(text, prof, idx, req_id, rec)
                 return prof
             self.counters["cache_misses"] += 1
@@ -240,6 +256,8 @@ class ZoneAgent:
         if not agree:
             self.counters["shadow_disagree"] += 1
             self.lib.replace(idx, prof)
+        else:
+            self.lib.trust[idx] += 1
 
     def try_local(self, view, demand, profile, rec):
         """Deterministic solver on this zone's live table. Measured compute

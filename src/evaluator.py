@@ -40,7 +40,9 @@ from telemetry import Telemetry  # noqa: E402
 
 PROPOSED = ["full"]
 ABLATIONS = [a for a in ablations.DISABLES if a != "full"]
-BASELINES = ["greedy_oracle", "rule_based", "react", "lats", "agentedge", "core"]
+# cheapest first, so a partially finished campaign always has the comparisons
+# that matter most (LATS, by far the most expensive, runs last)
+BASELINES = ["greedy_oracle", "rule_based", "core", "react", "agentedge", "lats"]
 ALL_SYSTEMS = PROPOSED + ABLATIONS + BASELINES
 GROUP = {**{s: "proposed" for s in PROPOSED}, **{s: "ablation" for s in ABLATIONS},
          **{s: "baseline" for s in BASELINES}}
@@ -50,6 +52,10 @@ KEY_METRICS = ["acceptance_rate", "completion_rate", "escalation_success", "esca
                "invocations_per_req", "llm_invocations_per_req", "slm_invocations_per_req",
                "fresh_calls_per_req", "inv_per_req_first_quarter", "inv_per_req_last_quarter",
                "inv_per_req_slope_per_bin", "cache_hit_rate", "llm_stage_rate",
+               "llm_per_escalation", "llm_per_escalation_first_quarter",
+               "llm_per_escalation_last_quarter", "llm_per_escalation_slope_per_bin",
+               "memory_share_of_escalations", "cache_miss_first_quarter",
+               "cache_miss_last_quarter",
                "lat_total_mean", "lat_total_p95", "lat_setup_mean", "tokens_per_req_all",
                "translation_service_type_acc", "locality_violation_rate",
                "fail_rate_after_accept", "preempt_per_100req", "degrade_per_100req",
@@ -180,12 +186,18 @@ def run_one(ctx, name, seed, force=False):
         return json.load(open(mp))
     wl = SB.load_workload(ctx.profile, seed)
     ctx.warm(wl)
-    cache_root = os.path.join(LLM_CACHE_DIR, ctx.profile, name)
+    # one disk cache per (system, seed): parallel shards never share a file, and a
+    # seed's fresh-call count never depends on which seeds happened to run first
+    cache_root = os.path.join(LLM_CACHE_DIR, ctx.profile, name, f"seed{seed}")
     tel = simulate(ctx, name, wl, seed, cache_root)
-    tel.dump(os.path.join(d, f"seed{seed}.telemetry.jsonl.gz"))
+    tp = os.path.join(d, f"seed{seed}.telemetry.jsonl.gz")
+    tel.dump(tp + ".tmp")
+    os.replace(tp + ".tmp", tp)
     m = M.compute(tel)
     m["meta"] = {k: v for k, v in tel.meta.items() if k not in ("nodes", "workload")}
-    json.dump(m, open(mp, "w"), indent=1, default=_json_default)
+    with open(mp + ".tmp", "w") as f:        # atomic: a killed run never leaves a
+        json.dump(m, f, indent=1, default=_json_default)   # file that looks finished
+    os.replace(mp + ".tmp", mp)
     return m
 
 
@@ -199,7 +211,10 @@ def _json_default(o):
     return str(o)
 
 
-def run_matrix(profile, systems, seeds, force=False):
+def run_matrix(profile, systems, seeds, force=False, shard=(0, 1)):
+    """shard=(i, n): run only every n-th (system, seed) job starting at i, so n
+    processes - each pointed at its own model-server pair - can share the
+    campaign. Jobs are interleaved, so expensive systems spread evenly."""
     ctx = Context(profile)
     if not ctx.mock and not PROVIDERS:
         discover_providers()
@@ -209,18 +224,22 @@ def run_matrix(profile, systems, seeds, force=False):
                          "...). See local_llm/README.md, or use --profile smoke.")
     if ctx.mock:
         discover_providers(mock=True)
-    total, k = len(systems) * len(seeds), 0
-    for name in systems:
-        for seed in seeds:
-            k += 1
-            t0 = time.time()
-            m = run_one(ctx, name, seed, force)
-            S = m["scalars"]
-            print(f"[{k}/{total}] {name:18s} seed{seed}: acc={_f(S['acceptance_rate'])} "
-                  f"compl={_f(S['completion_rate'])} esc_ok={_f(S['escalation_success'])} "
-                  f"inv/req={_f(S['invocations_per_req'])} "
-                  f"(first->last quarter {_f(S['inv_per_req_first_quarter'])}->"
-                  f"{_f(S['inv_per_req_last_quarter'])}) ({time.time() - t0:.0f}s)", flush=True)
+    jobs = [(name, seed) for name in systems for seed in seeds]
+    si, sn = shard
+    jobs = [j for idx, j in enumerate(jobs) if idx % sn == si]
+    total, k = len(jobs), 0
+    tag = f"shard {si + 1}/{sn} " if sn > 1 else ""
+    for name, seed in jobs:
+        k += 1
+        t0 = time.time()
+        m = run_one(ctx, name, seed, force)
+        S = m["scalars"]
+        print(f"{tag}[{k}/{total}] {name:18s} seed{seed}: acc={_f(S['acceptance_rate'])} "
+              f"compl={_f(S['completion_rate'])} esc_ok={_f(S['escalation_success'])} "
+              f"inv/req={_f(S['invocations_per_req'])} "
+              f"LLM/esc={_f(S.get('llm_per_escalation'))} "
+              f"cache_miss {_f(S.get('cache_miss_first_quarter'))}->"
+              f"{_f(S.get('cache_miss_last_quarter'))} ({time.time() - t0:.0f}s)", flush=True)
 
 
 def _f(x, nd=3):
@@ -373,6 +392,59 @@ def _write_breakdowns(runs, systems, seeds, tdir):
             for z, c in T.get("placements_per_zone", {}).items():
                 rows.append({"system": s, "seed": k, "zone": z, "placements": c})
     pd.DataFrame(rows).to_csv(os.path.join(tdir, "placements_per_zone.csv"), index=False)
+    savings_vs_ablations(runs, systems, seeds, tdir)
+
+
+SAVINGS_REFS = ("no_memory", "no_intent_cache", "memory_ablated", "no_digest")
+
+
+def _inv_bins(run):
+    c = run["series"]["calls_by_bin"]
+    return np.array(c["slm_inv"], float) + np.array(c["llm_inv"], float)
+
+
+def savings_vs_ablations(runs, systems, seeds, tdir):
+    """Causal evidence for the call-reduction claim: per hour, how many model
+    invocations the full system saves relative to the same system with a
+    mechanism removed, on the same workload (paired by seed). The raw per-
+    request rate follows the daily load curve; this ratio does not."""
+    import pandas as pd
+    rows, summary = [], []
+    if "full" not in systems:
+        return
+    for ref in SAVINGS_REFS:
+        if ref not in systems:
+            continue
+        per_seed = []
+        for k in seeds:
+            if ("full", k) not in runs or (ref, k) not in runs:
+                continue
+            f, a = _inv_bins(runs[("full", k)]), _inv_bins(runs[(ref, k)])
+            with np.errstate(invalid="ignore", divide="ignore"):
+                sv = np.where(a > 0, 1.0 - f / a, np.nan)
+            per_seed.append(sv)
+            for i, v in enumerate(sv):
+                rows.append({"reference": ref, "seed": k, "bin": i,
+                             "full_invocations": f[i], "ref_invocations": a[i], "savings": v})
+        if not per_seed:
+            continue
+        P = np.array(per_seed)
+        q = max(P.shape[1] // 4, 1)
+        first = [np.nanmean(p[:q]) for p in P]
+        last = [np.nanmean(p[-q:]) for p in P]
+        m1, h1, _ = ci95(first)
+        m2, h2, n = ci95(last)
+        summary.append({"reference": ref, "n_seeds": n,
+                        "savings_first_quarter": m1, "ci95_first": h1,
+                        "savings_last_quarter": m2, "ci95_last": h2,
+                        "savings_overall": float(1 - sum(_inv_bins(runs[("full", k)]).sum()
+                                                         for k in seeds if ("full", k) in runs
+                                                         and (ref, k) in runs) /
+                                                 max(sum(_inv_bins(runs[(ref, k)]).sum()
+                                                         for k in seeds if ("full", k) in runs
+                                                         and (ref, k) in runs), 1e-9))})
+    pd.DataFrame(rows).to_csv(os.path.join(tdir, "savings_vs_ablations_by_hour.csv"), index=False)
+    pd.DataFrame(summary).to_csv(os.path.join(tdir, "savings_vs_ablations.csv"), index=False)
 
 
 def _md_table(df):
@@ -423,7 +495,7 @@ def figures(profile, runs, systems, seeds):
     save(fig, "fig_outcomes.png")
 
     # 2. call reduction over time (the central claim)
-    fig, axes = plt.subplots(1, 3, figsize=(17, 4.6))
+    fig, axes = plt.subplots(1, 4, figsize=(22, 4.6))
     for s in systems:
         rows = [runs[(s, k)]["series"]["calls_by_bin"] for k in seeds if (s, k) in runs]
         if not rows:
@@ -432,7 +504,10 @@ def figures(profile, runs, systems, seeds):
         style = dict(color=COLORS[GROUP.get(s, "baseline")],
                      lw=2.4 if s == "full" else 1.0, alpha=1.0 if s == "full" else 0.6,
                      label=s)
-        for ax, key in zip(axes, ("invocations_per_request", "cache_hit_rate", "escalation_rate")):
+        for ax, key in zip(axes, ("invocations_per_request", "cache_hit_rate", "escalation_rate",
+                                  "llm_per_escalation")):
+            if key not in rows[0]:
+                continue
             y = np.nanmean(np.array([[np.nan if v is None else v for v in r[key]] for r in rows],
                                     float), axis=0)
             ax.plot(hrs, y, **style)
@@ -440,11 +515,29 @@ def figures(profile, runs, systems, seeds):
     axes[0].set_yscale("symlog", linthresh=1.0)
     axes[1].set_ylabel("intent-cache hit rate")
     axes[2].set_ylabel("escalation rate")
+    axes[3].set_ylabel("LLM invocations per escalation")
     for ax in axes:
         ax.set_xlabel("simulated hour")
     axes[0].set_title("Model invocations per request over time" + tag, fontsize=9)
-    axes[2].legend(fontsize=6, ncol=2)
+    axes[3].legend(fontsize=6, ncol=2)
     save(fig, "fig_calls_over_time.png")
+
+    # 2b. savings vs ablations per hour (causal view of the claim)
+    sp = os.path.join(results_dir(profile), "tables", "savings_vs_ablations_by_hour.csv")
+    if os.path.exists(sp):
+        import pandas as pd
+        d = pd.read_csv(sp)
+        if len(d):
+            fig, ax = plt.subplots(figsize=(8, 4.5))
+            for ref, g in d.groupby("reference"):
+                m = g.groupby("bin")["savings"].mean()
+                ax.plot(m.index, m.values, marker="o", ms=3, label=f"vs {ref}")
+            ax.axhline(0, color="black", lw=0.6)
+            ax.set_xlabel("simulated hour")
+            ax.set_ylabel("share of model invocations saved by full")
+            ax.set_title("Invocations saved by memory / cache, per hour" + tag, fontsize=9)
+            ax.legend(fontsize=8)
+            save(fig, "fig_savings_vs_ablations.png")
 
     # 3. latency: the three comparisons + component breakdown
     fig, axes = plt.subplots(1, 2, figsize=(15, 4.8))
@@ -559,7 +652,13 @@ def main(argv=None):
     ap.add_argument("--seeds", default=None, help="comma list; default = profile seeds")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--report-only", action="store_true")
+    ap.add_argument("--shard", default="0/1",
+                    help="i/N: run every N-th job starting at i (0-based); run the report "
+                         "once afterwards with --report-only (scripts/run_parallel.py does this)")
     args = ap.parse_args(argv)
+    si, sn = (int(x) for x in args.shard.split("/"))
+    if not 0 <= si < sn:
+        raise SystemExit("--shard must be i/N with 0 <= i < N")
     systems = [s for s in args.systems.split(",") if s]
     unknown = [s for s in systems if s not in ALL_SYSTEMS]
     if unknown:
@@ -570,7 +669,9 @@ def main(argv=None):
         if SB.calibration(args.profile) is None:
             raise SystemExit("workload not calibrated yet - run src/calibrate_workload.py "
                              f"--profile {args.profile} (main.py does this for you)")
-        run_matrix(args.profile, systems, seeds, force=args.force)
+        run_matrix(args.profile, systems, seeds, force=args.force, shard=(si, sn))
+        if sn > 1:
+            return                       # report once, after all shards finish
     report(args.profile, systems, seeds)
 
 

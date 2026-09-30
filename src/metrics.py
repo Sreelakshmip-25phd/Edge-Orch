@@ -145,7 +145,7 @@ def compute(tel, n_bins=24):
     # --- (1)(7) calls / cache / escalation over time -------------------------------
     keys = ("requests", "slm_fresh", "slm_cached_disk", "llm_fresh", "llm_cached_disk",
             "nonreq_llm_fresh", "nonreq_llm_cached_disk", "cache_hits", "slm_translations",
-            "escalations", "llm_stage", "slm_inv", "llm_inv")
+            "escalations", "llm_stage", "slm_inv", "llm_inv", "llm_inv_esc", "memory_esc")
     bins = {k: np.zeros(n_bins) for k in keys}
     for r in R:
         i = b(r.send_time)
@@ -159,6 +159,9 @@ def compute(tel, n_bins=24):
         bins["slm_translations"][i] += r.translation_source in ("slm_fresh", "slm_cached_disk")
         bins["escalations"][i] += r.escalated
         bins["llm_stage"][i] += r.reached_llm_stage
+        if r.escalated:
+            bins["llm_inv_esc"][i] += l_inv
+            bins["memory_esc"][i] += r.decision_source in MEMORY_SOURCES
     for c in tel.llm_calls:
         key = f"nonreq_{c.role}_{c.source}"
         if c.req_id is None and key in bins:          # e.g. procedural-rule authoring
@@ -178,6 +181,15 @@ def compute(tel, n_bins=24):
             "cache_hit_rate": np.where(reqs > 0, bins["cache_hits"] / reqs, np.nan).tolist(),
             "escalation_rate": np.where(reqs > 0, bins["escalations"] / reqs, np.nan).tolist(),
             "llm_stage_rate": np.where(reqs > 0, bins["llm_stage"] / reqs, np.nan).tolist(),
+            # need-normalised: cost per escalation / per translation, which
+            # removes the daily load curve from the call-reduction question
+            "llm_per_escalation": np.where(bins["escalations"] > 0,
+                                           bins["llm_inv_esc"] / bins["escalations"],
+                                           np.nan).tolist(),
+            "memory_share_of_escalations": np.where(bins["escalations"] > 0,
+                                                    bins["memory_esc"] / bins["escalations"],
+                                                    np.nan).tolist(),
+            "cache_miss_rate": np.where(reqs > 0, 1 - bins["cache_hits"] / reqs, np.nan).tolist(),
             "acceptance_rate": [float(acc[[b(r.send_time) == i for r in R]].mean())
                                 if reqs[i] else None for i in range(n_bins)],
         }
@@ -209,6 +221,24 @@ def compute(tel, n_bins=24):
         np.where(reqs > 0, inv_bins / np.maximum(reqs, 1), np.nan), reqs)
     S["cache_hit_first_quarter"] = _rate(bins["cache_hits"][:q].sum(), first)
     S["cache_hit_last_quarter"] = _rate(bins["cache_hits"][-q:].sum(), last)
+    # need-normalised versions (the raw per-request rate above rises and falls
+    # with the daily load curve: at night almost nothing escalates)
+    esc_b = bins["escalations"]
+    S["llm_per_escalation"] = _rate(bins["llm_inv_esc"].sum(), esc_b.sum())
+    S["llm_per_escalation_first_quarter"] = _rate(bins["llm_inv_esc"][:q].sum(), esc_b[:q].sum())
+    S["llm_per_escalation_last_quarter"] = _rate(bins["llm_inv_esc"][-q:].sum(), esc_b[-q:].sum())
+    S["llm_per_escalation_slope_per_bin"] = _slope(
+        np.where(esc_b > 0, bins["llm_inv_esc"] / np.maximum(esc_b, 1), np.nan), esc_b)
+    S["memory_share_of_escalations"] = _rate(bins["memory_esc"].sum(), esc_b.sum())
+    busy = np.where(esc_b >= max(esc_b.max() * 0.25, 1))[0]      # hours with real escalation load
+    if len(busy) >= 4:
+        h = len(busy) // 2
+        S["llm_per_escalation_busy_first_half"] = _rate(bins["llm_inv_esc"][busy[:h]].sum(),
+                                                        esc_b[busy[:h]].sum())
+        S["llm_per_escalation_busy_second_half"] = _rate(bins["llm_inv_esc"][busy[h:]].sum(),
+                                                         esc_b[busy[h:]].sum())
+    S["cache_miss_first_quarter"] = _rate(first - bins["cache_hits"][:q].sum(), first)
+    S["cache_miss_last_quarter"] = _rate(last - bins["cache_hits"][-q:].sum(), last)
 
     # --- (4) failures by cause -----------------------------------------------------
     causes = Counter(r.end_cause for r in R)

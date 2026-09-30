@@ -41,6 +41,18 @@ def table(runs, systems, seeds, cols):
     return head + rows
 
 
+def _savings_md(profile):
+    import pandas as pd
+    p = os.path.join(results_dir(profile), "tables", "savings_vs_ablations.csv")
+    if not os.path.exists(p):
+        return ""
+    d = pd.read_csv(p)
+    if not len(d):
+        return ""
+    return ("\n## Invocations saved by the full system vs ablations (paired by seed)\n\n"
+            + E._md_table(d.round(4)))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--profile", default="full", choices=list(PROFILES))
@@ -65,7 +77,17 @@ def main():
             ("LLM/req last q.", "llm_per_req_last_quarter"),
             ("cache hit first q.", "cache_hit_first_quarter"),
             ("cache hit last q.", "cache_hit_last_quarter"),
-            ("acceptance", "acceptance_rate"), ("completion", "completion_rate")]))
+            ("acceptance", "acceptance_rate"), ("completion", "completion_rate")]) +
+        "\n## Normalised by need (removes the daily load curve)\n\n" +
+        table(runs, systems, seeds, [
+            ("LLM/escalation first q.", "llm_per_escalation_first_quarter"),
+            ("LLM/escalation last q.", "llm_per_escalation_last_quarter"),
+            ("LLM/escalation slope", "llm_per_escalation_slope_per_bin"),
+            ("memory share of escalations", "memory_share_of_escalations"),
+            ("cache miss first q.", "cache_miss_first_quarter"),
+            ("cache miss last q.", "cache_miss_last_quarter"),
+            ("escalation rate", "escalation_rate")]) +
+        _savings_md(a.profile))
     open(os.path.join(out, "table_outcomes.md"), "w").write(banner + table(runs, systems, seeds, [
         ("accepted", "acceptance_rate"), ("completed", "completion_rate"),
         ("escalation rate", "escalation_rate"), ("escalation success", "escalation_success"),

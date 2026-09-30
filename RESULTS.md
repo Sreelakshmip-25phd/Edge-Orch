@@ -94,15 +94,23 @@ expensive by design), but say nothing about real model behaviour.
 
 ## 4. Still to run on the GPU machine
 
-1. `python scripts/calibrate_latency.py --target <slm>@<url> --target <llm>@<url>`,
-   then commit `src/latency_distributions.json`. It is currently absent; real
-   runs fall back to per-call measured wall time.
-2. `python main.py` for the full campaign: 14 systems × 10 seeds. Scenario
-   and calibration are deterministic and regenerate identically.
-3. `python scripts/run_model_sweep.py`: the probe, latency calibration and
-   one end-to-end evaluation for each of the 8 local tiers, plus the hosted
-   reference probe.
-4. `python scripts/paper_results.py --profile full`, then update this file
-   with the real tables.
-5. Optional: `scripts/generate_device_calibration.py --measure-container-start --device-class rack_edge_server`
+The first GPU attempt (3 seeds of `full`, then interrupted) was made with
+code that has since changed: the deployment-latency fix, trust-based cache
+auditing, pre-verified LLM options and 3 memory candidates per escalation
+(ARCHITECTURE.md §4–6). Those 3 seeds must be discarded.
+
+1. Pull, then delete the old outputs and caches of the full profile:
+   `results/full/runs/` and `cache/full/` (keep `results/full/scenario/`:
+   topology, workloads and K are unchanged).
+2. Commit `src/latency_distributions.json` from the GPU machine if not yet done.
+3. `python scripts/run_parallel.py --workers N --slm <slm> --llm <llm>` for all
+   14 systems x 10 seeds (or `python main.py`, sequentially).
+4. `python scripts/run_model_sweep.py`: probe, latency calibration and one
+   end-to-end evaluation per local tier, plus the hosted reference probe.
+5. `python scripts/paper_results.py --profile full`, then update this file
+   with the real tables. The call-reduction claim is to be read from the
+   need-normalised measures and the savings vs ablations
+   (ARCHITECTURE.md "Measuring model calls fall over time"), next to the
+   raw per-request curve.
+6. Optional: `scripts/generate_device_calibration.py --measure-container-start --device-class rack_edge_server`
    to replace the assumed container start time for the server class.
