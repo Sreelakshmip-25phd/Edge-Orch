@@ -198,6 +198,7 @@ class ServiceInfo:
     t_start: float = 0.0
     t_end: float = 0.0
     state: str = "PLACED"
+    redeploy_ms: float = 0.0
 
     def view(self, now):
         return {"req_id": self.req_id,
@@ -389,7 +390,13 @@ class EdgeSimulation:
         svc.t_start, svc.t_end = t, t + lifetime
         self.services[svc.req_id] = svc
         rec = self.tel.requests[svc.req_id]
-        rec.add_latency("deployment", self.lat.deployment(n.device_class))
+        deploy_ms = self.lat.deployment(n.device_class)
+        if note == "arrival":
+            # only the arrival placement belongs to the request's setup latency;
+            # a re-placement's container start is recorded on its migrate event
+            rec.add_latency("deployment", deploy_ms)
+        else:
+            svc.redeploy_ms = deploy_ms
         self.tel.transition(svc.req_id, t, "PLACED", note)
         if note != "arrival":
             rec.node_final, rec.zone_final = dec.node, n.zone_id
@@ -423,10 +430,11 @@ class EdgeSimulation:
             self.tel.finalize(svc.req_id, "preempt_unmigrated")
             self.tel.log_event(t, "victim_lost", req=svc.req_id)
             return
-        self.tel.log_event(t, "migrate", req=svc.req_id, to_node=dec.node,
-                           path=dec.path, cause="preempted",
-                           replan_latency_ms=round(scratch.total_latency_ms, 3))
+        mev = self.tel.log_event(t, "migrate", req=svc.req_id, to_node=dec.node,
+                                 path=dec.path, cause="preempted",
+                                 replan_latency_ms=round(scratch.total_latency_ms, 3))
         self._commit(t, svc, dec, remaining, note="migrated", depth=depth)
+        mev.data["redeploy_ms"] = round(svc.redeploy_ms, 3)
 
     def _complete(self, rid, t_end):
         svc = self.services.get(rid)
@@ -457,10 +465,11 @@ class EdgeSimulation:
             scratch = _scratch(rid)
             dec = self.orch.replan(t, svc, scratch, reason="node_failure")
             if dec is not None and dec.node is not None:
-                self.tel.log_event(t, "migrate", req=rid, to_node=dec.node,
-                                   path=dec.path, cause="node_failure",
-                                   replan_latency_ms=round(scratch.total_latency_ms, 3))
+                mev = self.tel.log_event(t, "migrate", req=rid, to_node=dec.node,
+                                         path=dec.path, cause="node_failure",
+                                         replan_latency_ms=round(scratch.total_latency_ms, 3))
                 self._commit(t, svc, dec, remaining, note="replanned", depth=0)
+                mev.data["redeploy_ms"] = round(svc.redeploy_ms, 3)
             else:
                 svc.state = "DISPLACED"
                 self.tel.transition(rid, t, "DISPLACED", "node_failure")

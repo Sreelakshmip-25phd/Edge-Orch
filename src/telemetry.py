@@ -262,8 +262,10 @@ class Telemetry:
 
     # --- events / snapshots ----------------------------------------------
     def log_event(self, t, kind, **data):
-        self.events.append(EventRecord(t=round(t, 3), kind=kind, data=data))
+        ev = EventRecord(t=round(t, 3), kind=kind, data=data)
+        self.events.append(ev)
         self._cum[f"event_{kind}"] += 1
+        return ev
 
     def count(self, key, n=1):
         """Cumulative counter that lands in every later snapshot. Used for

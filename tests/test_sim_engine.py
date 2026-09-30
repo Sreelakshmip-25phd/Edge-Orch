@@ -100,3 +100,25 @@ def test_node_rejects_overallocation():
         pass
     n.release("a")
     assert n.cpu_used == 0.0
+
+
+def test_migration_does_not_inflate_arrival_latency():
+    """Deployment is charged once, at arrival; re-placements record their
+    container start on the migrate event instead."""
+    import numpy as np
+    rng = np.random.default_rng(1)
+    types = ["iot_aggregator", "traffic_monitor", "video_analytics", "drone_control"]
+    reqs = [req(i, float(i), "z0", types[i % 4], float(rng.uniform(0.5, 3.5)),
+                float(rng.uniform(0.2, 3.0)), float(rng.uniform(5, 60))) for i in range(80)]
+    topo, wl = tiny_topology(), workload(reqs)
+    cat = ServiceCatalog()
+    tel = Telemetry()
+    from edge_device import DeviceFleet
+    sim = EdgeSimulation(topo, wl, Adversary(), tel, _Lat(), cat, DeviceFleet.from_workload(wl, topo),
+                         Manifests(cat, ResourceModel(SYNTHETIC_RESOURCE_PROFILES)))
+    sim.run()
+    moved = {e.data["req"] for e in tel.events if e.kind == "migrate"}
+    assert moved
+    for rid in moved:
+        assert tel.requests[rid].latency_breakdown["deployment"] == 5.0   # exactly one draw
+    assert all("redeploy_ms" in e.data for e in tel.events if e.kind == "migrate")
