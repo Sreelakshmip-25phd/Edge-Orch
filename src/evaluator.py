@@ -166,6 +166,7 @@ def simulate(ctx, name, wl, seed, cache_root=None):
         "shadow_rate": SHADOW_RATE, "disables": list(getattr(orch, "disables", ())),
         "oracle_calls": sim.oracle_calls, "probes": sim.probe_count,
         "system_stats": orch.stats() if hasattr(orch, "stats") else {},
+        "llm_samples": orch.samples() if hasattr(orch, "samples") else {},
         "nodes": {n.node_id: {"cpu": n.cpu_cap, "power_w": n.power_w,
                               "device_class": n.device_class} for n in sim.nodes.values()},
         "wall_s": round(time.time() - t0, 2), "git": _git_rev(),

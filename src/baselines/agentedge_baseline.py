@@ -22,6 +22,7 @@ catches bad plans", not "fewer LLM calls", so its LLM calls per request are
 expected to stay flat over time (>= 4 per request) - metrics.py shows this
 next to the proposed system's falling curve.
 """
+from global_agent import OBJECTIVE
 from llm_client import LLMUnavailable
 from scenario import PRIORITY_RANK
 from sim_engine import Decision
@@ -38,6 +39,7 @@ state for the planner. Respond with ONLY a JSON object:
  "hotspots": [<zone ids that are overloaded or unhealthy>], "summary": "<one sentence>"}"""
 
 PLAN_SYS = """You are the planning agent of an edge orchestrator. Decide how to serve the request.
+""" + OBJECTIVE + """
 Respond with ONLY a JSON object:
 {"action": "place"|"preempt"|"degrade"|"reject", "zone": "<zone id>", "victim": "<req_id or null>",
  "degrade_level": <1.0|0.8|0.6|0.4>, "reason": "<one sentence>"}

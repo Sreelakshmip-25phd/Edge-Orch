@@ -147,6 +147,9 @@ class HierarchicalOrchestrator:
             self.zones[zone].policy = dict(SURGE_POLICY)
             self.surge_policies += 1
 
+    def samples(self):
+        return self.global_.samples
+
     def stats(self):
         agg = {}
         for za in self._agents():

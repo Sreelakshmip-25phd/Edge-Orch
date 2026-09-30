@@ -46,23 +46,34 @@ RULE_MIN_EPS, RULE_MIN_FRAC = 5, 0.6
 EPISODIC_PER_KEY = 10
 NEGATIVE_TTL_S = 60.0
 
+# The operator's objective, stated identically in every LLM decision prompt
+# (proposed system, CORE, ReAct/LATS tool description, AgentEdge planner), so
+# no system is advantaged by knowing what "good" means. Added after the first
+# GPU pilot: without it, Qwen2.5-7B chose "reject" for 85% of decisions even
+# when every offered option had been verified to fit.
+OBJECTIVE = """Objective: serve as many requests as possible, respecting each service's
+constraints. A rejected request is not served at all - the worst outcome for its user.
+A degraded placement runs the service at a reduced share of its CPU/memory, never below
+the floor its owner declared acceptable, so every offered degradation level is acceptable
+to that service. Pre-emption evicts a strictly lower-priority service to serve a higher-
+priority one; the evicted service is migrated elsewhere if possible. Choose reject only
+when every available option is clearly worse than not serving the request."""
+
 DECIDE_SYS = """You are the global coordinator of a three-tier edge orchestrator. A service
 request could not be placed by its zone agent. Choose exactly ONE action.
+""" + OBJECTIVE + """
 Respond with ONLY a JSON object:
 {"action": "place"|"preempt"|"degrade"|"reject", "zone": "<zone id or null>",
  "victim": "<req_id or null>", "degrade_level": <number or null>, "reason": "<one sentence>"}
-Rules:
-- "place": zone must be one of options.place (zones whose capacity digest suggests a node fits).
-- "preempt": victim must be one of options.preempt (strictly lower-priority running services whose
-  eviction frees enough room on their node); zone = that victim's zone. The victim is migrated
-  elsewhere if possible, otherwise it is lost.
-- "degrade": run the request with a fraction of its CPU/memory; (zone, degrade_level) must be an
-  entry of options.degrade. Levels below the service's floor are never offered.
-- "reject": when no option is worth taking.
-Guidance: placing without harm beats pre-emption or degradation; latency-sensitive (realtime)
-services should stay close (low rtt_ms); prefer evicting services that are low priority, nearly
-finished and interruption-tolerant; degrade only services that tolerate reduced resources;
-avoid zones listed in memory_hints.failed_zones."""
+Rules (every option listed has been checked to fit right now):
+- "place": zone must be one of options.place.
+- "preempt": victim must be one of options.preempt; zone = that victim's zone.
+- "degrade": (zone, degrade_level) must be exactly one entry of options.degrade.
+- "reject": serve nothing.
+Guidance: a full-size placement beats pre-emption or degradation; latency-sensitive (realtime)
+services should stay close (low rtt_ms); when pre-empting, prefer victims that are low priority
+and nearly finished; prefer the mildest degradation (highest level) available; avoid zones
+listed in memory_hints.failed_zones."""
 
 RULE_SYS = """Author ONE placement rule from episodic evidence. Respond ONLY with JSON:
 {"condition": {"service_type": "<type>"}, "action": {"prefer_zone": "<zone_id>"},
@@ -166,6 +177,7 @@ class GlobalAgent:
         self._skip_place = set()
         self._no_options = False
         self._opt_nodes = {}
+        self.samples = {"reject": [], "invalid": []}     # kept in run metadata, not snapshots
 
     # --- cluster-state inputs -----------------------------------------------
     def on_digest_tick(self, t, digests):
@@ -495,6 +507,10 @@ class GlobalAgent:
             dec, err = self._verify(res.data, options, view, rec, profile, demand, pol,
                                     local_only)
             if dec is not None:
+                if dec.action == "reject" and len(self.samples["reject"]) < 25:
+                    self.samples["reject"].append({"reason": str(res.data.get("reason"))[:300],
+                                                   "n_options": {k: len(v) for k, v in options.items()},
+                                                   "priority": profile.get("priority")})
                 dec.decision_source = "llm_fresh" if res.source == "fresh" else "llm_cached_disk"
                 rec.llm_verified = True
                 rec.llm_retries = attempt
@@ -502,6 +518,13 @@ class GlobalAgent:
                 return dec
             feedback = f"Your previous answer {json.dumps(res.data)[:200]} was rejected: {err}."
             self.counters["llm_invalid"] += 1
+            a = res.data.get("action")
+            cat = a if a in ("place", "preempt", "degrade", "reject") else \
+                ("parse" if "_parse_error" in res.data else "unknown_action")
+            self.counters[f"llm_invalid_{cat}"] += 1
+            if len(self.samples["invalid"]) < 25:
+                self.samples["invalid"].append({"answer": res.data, "error": err,
+                                                "n_options": {k: len(v) for k, v in options.items()}})
         rec.llm_verified = False
         rec.llm_retries = 1
         return None

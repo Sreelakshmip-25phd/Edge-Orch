@@ -254,6 +254,21 @@ request, slightly inflating total latency for interrupted services.)
   The chosen action is re-checked at the same instant. On failure there is one
   retry with the verifier's error as feedback, then the rule chain takes
   over. The LLM is not called at all when there are no options.
+
+  **Stated objective.** Every LLM decision prompt carries the same objective
+  text (`global_agent.OBJECTIVE`): the proposed system, CORE (which shares
+  the prompt), ReAct/LATS (via the tool description) and AgentEdge's planner.
+  It says: serve as many requests as possible; a rejection is the worst
+  outcome; every offered degradation level is within what the service
+  accepts; pre-emption only takes from strictly lower priority. This was
+  added after the first GPU pilot. Without it, Qwen2.5-7B answered "reject"
+  to 85% of decisions (1,829 of 2,157 on seed 0) even though every offered
+  option had been verified to fit, and escalation success stayed around 0.5.
+  Each run's metadata keeps up to 25 sample reject reasons and invalid
+  answers (`meta.llm_samples`), and counts invalid answers per action type
+  (`g_llm_invalid_<action>`). The prompt grew by about 100 tokens after
+  latency calibration; the calibrated `decide` latency was measured with the
+  shorter prompt.
 - **Pre-emption and migration.** The victim is evicted first. The request
   takes the freed capacity. The victim then goes through the same `replan()`
   path as failure recovery (local, then escalate), which may itself pre-empt

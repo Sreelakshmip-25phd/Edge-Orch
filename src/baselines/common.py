@@ -8,6 +8,7 @@ proposed system's probes.
 """
 import json
 
+from global_agent import OBJECTIVE
 from scenario import PRIORITY_RANK, SERVICE_TYPES
 from sim_engine import EPS, Decision
 
@@ -145,7 +146,8 @@ TOOLS_DOC = """Tools (call exactly one per step):
   service on that node, or at a reduced resource level not below the type's floor). Commits on success.
 - finish {}: give up (the request is rejected).
 service_type must be a catalog name (or a short new snake_case name if nothing fits).
-data_locality "zone_local" services must stay in the origin zone."""
+data_locality "zone_local" services must stay in the origin zone.
+""" + OBJECTIVE
 
 
 def request_block(catalog, sizes, text, origin, view):
