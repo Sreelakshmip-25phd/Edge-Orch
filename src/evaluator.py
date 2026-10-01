@@ -354,12 +354,68 @@ def aggregate(profile, systems, seeds):
     tests = paired_tests(runs, present, seeds, KEY_METRICS)
     pd.DataFrame(tests).to_csv(os.path.join(tdir, "paired_tests_vs_full.csv"), index=False)
     _write_breakdowns(runs, present, seeds, tdir)
+    _write_group_comparisons(runs, present, seeds, tests, tdir)
     meta = {s: runs[next((s, k) for k in seeds if (s, k) in runs)]["meta"] for s in present}
     json.dump({"profile": profile, "systems": present, "seeds": seeds,
                "latency_source": {s: meta[s].get("latency_source") for s in present},
                "llm": {s: meta[s].get("llm") for s in present}},
               open(os.path.join(tdir, "provenance.json"), "w"), indent=1)
     return runs, present
+
+
+# Quality vs cost, reported separately for ablations (what each mechanism
+# contributes) and baselines (how the proposed system compares with other
+# approaches). Differences are system minus full (percentage points); cost
+# columns are ratios system / full, so e.g. "2.5x" calls = 2.5 times full's.
+QUALITY = [("acceptance_rate", "accepted"), ("completion_rate", "completed"),
+           ("escalation_success", "escalation success"),
+           ("acceptance_C", "accepted, last third"),
+           ("locality_violation_rate", "locality violations")]
+COST = [("invocations_per_req", "model calls/req"), ("tokens_per_req_all", "tokens/req"),
+        ("lat_setup_mean", "setup latency")]
+
+
+def _group_table(runs, systems, seeds, tests):
+    def mean(s, k):
+        return ci95([runs[(s, i)]["scalars"].get(k) for i in seeds if (s, i) in runs])[0]
+
+    pval = {(t["system"], t["metric"]): t.get("t_p_holm") for t in tests}
+    rows = []
+    for s in systems:
+        if s == "full":
+            continue
+        r = {"system": s}
+        for k, lab in QUALITY:
+            a, b = mean("full", k), mean(s, k)
+            if a is None or b is None:
+                r[lab] = "n/a"
+                continue
+            p = pval.get((s, k))
+            star = "" if p is None else (" *" if p < 0.05 else "")
+            r[lab] = f"{100 * (b - a):+.1f} pp{star}"
+        for k, lab in COST:
+            a, b = mean("full", k), mean(s, k)
+            r[lab] = "n/a" if not a or b is None else f"{b / a:.2f}x"
+        rows.append(r)
+    return rows
+
+
+def _write_group_comparisons(runs, systems, seeds, tests, tdir):
+    import pandas as pd
+    if "full" not in systems:
+        return
+    head = ("Differences vs full: quality = system minus full in percentage points "
+            "(negative = worse than full, except locality violations where negative = "
+            "fewer); cost = system / full (above 1.00x = more expensive than full). "
+            "* = paired t-test vs full significant after Holm correction (p < 0.05).\n\n")
+    for group, members in (("ablations", ABLATIONS), ("baselines", BASELINES)):
+        sel = [s for s in members if s in systems]
+        if not sel:
+            continue
+        df = pd.DataFrame(_group_table(runs, ["full"] + sel, seeds, tests))
+        df.to_csv(os.path.join(tdir, f"compare_{group}.csv"), index=False)
+        with open(os.path.join(tdir, f"compare_{group}.md"), "w") as f:
+            f.write(f"# full vs {group}\n\n" + head + _md_table(df))
 
 
 def _write_breakdowns(runs, systems, seeds, tdir):

@@ -117,6 +117,10 @@ def main():
                 if c in df]
         open(os.path.join(out, "model_comparison.md"), "w").write(
             E._md_table(df.sort_values("params_b")[cols]))
+    for g in ("ablations", "baselines"):     # kept separate: mechanism value vs other approaches
+        src = os.path.join(results_dir(a.profile), "tables", f"compare_{g}.md")
+        if os.path.exists(src):
+            open(os.path.join(out, f"compare_{g}.md"), "w").write(banner + open(src).read())
     fdir = os.path.join(results_dir(a.profile), "figures")
     for f in os.listdir(fdir) if os.path.isdir(fdir) else []:
         shutil.copy(os.path.join(fdir, f), os.path.join(out, f))
