@@ -443,6 +443,23 @@ comparisons. All systems keep all 10 seeds: the paired Wilcoxon test cannot
 reach p < 0.05 with fewer than 6 pairs, so cutting seeds for the expensive
 baselines would weaken exactly the comparisons that need to be defended.
 
+### The `quick` profile
+
+A first look in hours instead of weeks: the same topology, data and code as
+`full`, but 1,000 requests over a compressed 3-hour simulated day (the whole
+daily curve, surge and new service types replayed) and 3 seeds. Planned in two
+stages: `proposed,ablations,simple` on 3 seeds (~3 h on an RTX 4070 SUPER),
+then `agentic` (ReAct, AgentEdge, LATS) on seed 0 overnight. These cost about
+52, 77 and 194 GPU-minutes per 1,000-request seed, estimated from their call
+counts and the measured per-call latencies.
+
+With only 1,000 requests on a 50-node cluster, load can only reach the
+calibration band if a large share of services run at the same time. So the
+load factor is K = 512 (median service lifetime ≈ 85 min of the 3-hour run),
+against K = 48 (≈ 8 min of a 24 h day) in `full`. The quick profile is
+therefore for comparing systems on the same workload. Its absolute numbers
+are not comparable with the full campaign's.
+
 ## 14. Known limitations
 
 - Services do not follow their user when the device moves. Mobility affects

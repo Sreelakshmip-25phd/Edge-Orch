@@ -44,6 +44,24 @@ ABLATIONS = [a for a in ablations.DISABLES if a != "full"]
 # that matter most (LATS, by far the most expensive, runs last)
 BASELINES = ["greedy_oracle", "rule_based", "core", "react", "agentedge", "lats"]
 ALL_SYSTEMS = PROPOSED + ABLATIONS + BASELINES
+# group names accepted wherever a --systems list is (e.g. "proposed,ablations,simple")
+SYSTEM_GROUPS = {"proposed": PROPOSED, "ablations": ABLATIONS,
+                 "simple": ["greedy_oracle", "rule_based", "core"],
+                 "agentic": ["react", "agentedge", "lats"], "all": None}
+
+
+def expand_systems(spec):
+    out = []
+    for tok in [t.strip() for t in spec.split(",") if t.strip()]:
+        names = ALL_SYSTEMS if tok == "all" else SYSTEM_GROUPS.get(tok, [tok])
+        out += [n for n in names if n not in out]
+    unknown = [n for n in out if n not in ALL_SYSTEMS]
+    if unknown:
+        raise SystemExit(f"unknown systems {unknown}; choose from {ALL_SYSTEMS} "
+                         f"or groups {sorted(SYSTEM_GROUPS)}")
+    return [n for n in ALL_SYSTEMS if n in out]      # canonical (cheapest-first) order
+
+
 GROUP = {**{s: "proposed" for s in PROPOSED}, **{s: "ablation" for s in ABLATIONS},
          **{s: "baseline" for s in BASELINES}}
 
@@ -660,10 +678,7 @@ def main(argv=None):
     si, sn = (int(x) for x in args.shard.split("/"))
     if not 0 <= si < sn:
         raise SystemExit("--shard must be i/N with 0 <= i < N")
-    systems = [s for s in args.systems.split(",") if s]
-    unknown = [s for s in systems if s not in ALL_SYSTEMS]
-    if unknown:
-        raise SystemExit(f"unknown systems {unknown}; choose from {ALL_SYSTEMS}")
+    systems = expand_systems(args.systems)
     seeds = [int(x) for x in args.seeds.split(",")] if args.seeds else PROFILES[args.profile]["seeds"]
     if not args.report_only:
         SB.build_workloads(args.profile, seeds)

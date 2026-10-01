@@ -80,6 +80,14 @@ PROFILES = {
     "smoke": {"data": "synthetic", "n_requests": 600, "n_zones": 4,
               "seeds": [0, 1], "llm": "mock", "n_devices": 120,
               "horizon_s": 6 * 3600.0},
+    # quick: a first look in hours instead of weeks - same topology, data and
+    # code as "full", 1,000 requests over a *compressed* day (the whole Milan
+    # daily curve, surge and new service types replayed in 3 simulated hours),
+    # so load is calibrated with realistic service lifetimes rather than by
+    # stretching them over a sparse 24 h. Not the final campaign.
+    "quick": {"data": "real", "n_requests": 1000, "n_zones": 10,
+              "seeds": [0, 1, 2], "llm": "real", "n_devices": 250,
+              "horizon_s": 3 * 3600.0},
     "small": {"data": "real", "n_requests": 2000, "n_zones": 10,
               "seeds": [0, 1, 2], "llm": "real", "n_devices": 400,
               "horizon_s": HORIZON_S},

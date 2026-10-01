@@ -69,7 +69,7 @@ def main():
     cfg = PROFILES[prof]
     config.ensure_dirs(prof)
     import evaluator as E
-    systems = a.systems.split(",") if a.systems else E.ALL_SYSTEMS
+    systems = E.expand_systems(a.systems) if a.systems else E.ALL_SYSTEMS
     seeds = [int(x) for x in a.seeds.split(",")] if a.seeds else cfg["seeds"]
 
     print(f"profile={prof} data={cfg['data']} llm={cfg['llm']} "

@@ -19,6 +19,9 @@ Why this is safe (changes run time, never results):
     python scripts/run_parallel.py --workers 2 --slm llama32_3b --llm medium \\
         --systems react,agentedge,lats            # just the expensive baselines
     python scripts/run_parallel.py --workers 3 --dry-run   # show the plan only
+    python scripts/run_parallel.py --workers 1 --profile quick --systems proposed,ablations,simple
+--systems takes system names and/or groups: proposed, ablations, simple
+(greedy_oracle, rule_based, core), agentic (react, agentedge, lats), all.
 
 Memory: each worker holds one copy of both models plus their KV caches
 (llama32_3b + medium at Q4 with 4k context is roughly 8-9 GB). Pick
@@ -69,7 +72,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     import evaluator as E
-    systems = a.systems.split(",") if a.systems else E.ALL_SYSTEMS
+    systems = E.expand_systems(a.systems) if a.systems else E.ALL_SYSTEMS
     seeds = [int(x) for x in a.seeds.split(",")] if a.seeds else PROFILES[a.profile]["seeds"]
     n = a.workers
     ports = [(a.base_port + 2 * i, a.base_port + 2 * i + 1) for i in range(n)]
