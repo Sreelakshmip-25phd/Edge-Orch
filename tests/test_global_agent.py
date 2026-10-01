@@ -82,6 +82,7 @@ def test_llm_proposal_that_does_not_fit_is_rejected_and_retried_once():
     rec = ScratchRecord("r1")
     dec = ga.escalate(0.0, sim, "r1", "z0", prof, DEM, ["z0"], rec)
     assert [c["kind"] for c in llm.calls] == ["decide", "decide"]
+    assert json.loads(llm.calls[0]["user"])["allowed_actions"] == ["preempt", "reject"]
     assert "feedback" in json.loads(llm.calls[1]["user"])   # retry carries the verifier's error
     assert rec.llm_verified and rec.llm_retries == 1
     assert dec.action == "preempt" and dec.victims == ["x0"] and dec.path == "preempt_local"

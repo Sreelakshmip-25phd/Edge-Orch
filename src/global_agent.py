@@ -66,6 +66,7 @@ Respond with ONLY a JSON object:
 {"action": "place"|"preempt"|"degrade"|"reject", "zone": "<zone id or null>",
  "victim": "<req_id or null>", "degrade_level": <number or null>, "reason": "<one sentence>"}
 Rules (every option listed has been checked to fit right now):
+- "action" MUST be one of allowed_actions. An action is only allowed when it has options.
 - "place": zone must be one of options.place.
 - "preempt": victim must be one of options.preempt; zone = that victim's zone.
 - "degrade": (zone, degrade_level) must be exactly one entry of options.degrade.
@@ -436,6 +437,8 @@ class GlobalAgent:
                             "mem": round(demand["mem"], 3), "origin_zone": origin,
                             "degrade_floor": self.catalog.degrade_floor(profile.get("service_type"))},
                 "zones": zones, "options": options,
+                "allowed_actions": [a for a in ("place", "preempt", "degrade") if options.get(a)]
+                + ["reject"],
                 "memory_hints": {"failed_zones": self.mem.failed_zones(key, t)
                                  if self.use_memory else []}}
         if feedback:

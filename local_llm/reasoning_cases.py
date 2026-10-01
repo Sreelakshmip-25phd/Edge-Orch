@@ -52,7 +52,9 @@ def _fill(zs, z, cpu_free, mem_free, rng):
 def _case(name, kind, profile, cpu, mem, origin, zones, options, acceptable, preferred, floor):
     body = {"request": {"profile": profile, "cpu": cpu, "mem": mem, "origin_zone": origin,
                         "degrade_floor": floor},
-            "zones": zones, "options": options, "memory_hints": {"failed_zones": []}}
+            "zones": zones, "options": options,
+            "allowed_actions": [a for a in ("place", "preempt", "degrade") if options.get(a)] + ["reject"],
+            "memory_hints": {"failed_zones": []}}
     return {"name": name, "kind": kind, "user": json.dumps(body, sort_keys=True),
             "options": options, "acceptable": acceptable, "preferred": preferred}
 

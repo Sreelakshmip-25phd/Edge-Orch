@@ -266,7 +266,12 @@ request, slightly inflating total latency for interrupted services.)
   option had been verified to fit, and escalation success stayed around 0.5.
   Each run's metadata keeps up to 25 sample reject reasons and invalid
   answers (`meta.llm_samples`), and counts invalid answers per action type
-  (`g_llm_invalid_<action>`). The prompt grew by about 100 tokens after
+  (`g_llm_invalid_<action>`). The quick-profile pilot that followed showed
+  rejects down to 7% (8 of 111 decisions), but 68 of 111 first answers
+  proposed "place" when no full-size placement existed, each costing a retry.
+  The prompt therefore also lists `allowed_actions` (the actions that have
+  options, plus reject) and requires the answer to use one. The prompt grew
+  by about 100 tokens after
   latency calibration; the calibrated `decide` latency was measured with the
   shorter prompt.
 - **Pre-emption and migration.** The victim is evicted first. The request
