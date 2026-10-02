@@ -1,0 +1,52 @@
+{
+ "K": 512.0,
+ "greedy_acceptance_at_K": 0.882,
+ "target_band": [
+  0.8,
+  0.9
+ ],
+ "seed": 0,
+ "trace": [
+  {
+   "K": 1.0,
+   "greedy_acceptance": 1.0
+  },
+  {
+   "K": 2.0,
+   "greedy_acceptance": 1.0
+  },
+  {
+   "K": 4.0,
+   "greedy_acceptance": 1.0
+  },
+  {
+   "K": 8.0,
+   "greedy_acceptance": 1.0
+  },
+  {
+   "K": 16.0,
+   "greedy_acceptance": 1.0
+  },
+  {
+   "K": 32.0,
+   "greedy_acceptance": 1.0
+  },
+  {
+   "K": 64.0,
+   "greedy_acceptance": 1.0
+  },
+  {
+   "K": 128.0,
+   "greedy_acceptance": 0.999
+  },
+  {
+   "K": 256.0,
+   "greedy_acceptance": 0.951
+  },
+  {
+   "K": 512.0,
+   "greedy_acceptance": 0.882
+  }
+ ],
+ "method": "lifetime scaling, bracket + bisection on greedy_oracle acceptance"
+}

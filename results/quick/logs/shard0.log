@@ -1,0 +1,9 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|##########| 103/103 [00:00<00:00, 2210.31it/s]
+  provider: LOCAL_LLM_URL_SLM (http://127.0.0.1:8100) [role=slm]
+  provider: LOCAL_LLM_URL_LLM (http://127.0.0.1:8101) [role=llm]
+[1/3] react              seed0: acc=0.313 compl=0.306 esc_ok=0.088 inv/req=4.899 LLM/esc=5.183 cache_miss 1.000->1.000 (5614s)
+[2/3] agentedge          seed0: acc=0.744 compl=0.671 esc_ok=0.689 inv/req=6.046 LLM/esc=6.159 cache_miss 1.000->1.000 (3732s)
+[3/3] lats               seed0: acc=0.657 compl=0.621 esc_ok=0.333 inv/req=16.968 LLM/esc=19.529 cache_miss 1.000->1.000 (21817s)
+tables -> C:\Users\IIITK\Documents\John-Sree\Edge-Orch\results\quick\tables
+figures -> C:\Users\IIITK\Documents\John-Sree\Edge-Orch\results\quick\figures

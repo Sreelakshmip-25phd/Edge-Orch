@@ -1,0 +1,129 @@
+{
+ "meta": {
+  "seed": 2,
+  "n_requests": 1000,
+  "n_devices": 250,
+  "horizon_s": 10800.0,
+  "slot_s": 75.0,
+  "n_slots": 144,
+  "surge_zone": "z6",
+  "surge_center_s": 7650.0,
+  "surge_window_s": [
+   6750.0,
+   8550.0
+  ],
+  "phases": [
+   [
+    "A",
+    0.0,
+    8.0
+   ],
+   [
+    "B",
+    8.0,
+    16.0
+   ],
+   [
+    "C",
+    16.0,
+    24.0
+   ]
+  ],
+  "mobility_forced_device_picks": 0,
+  "activity_source": "Milan telecom activity (Harvard Dataverse doi:10.7910/DVN/EGZHFV)",
+  "base_day": "2013-11-07",
+  "surge_day": "2013-11-13",
+  "resource_source": "alibaba_cluster_trace_v2018_batch_task",
+  "n_failures": 3,
+  "lifetime_scale": 1.0
+ },
+ "drift": {
+  "A": {
+   "n": 205,
+   "type_mix": {
+    "ar_session": 0.132,
+    "federated_ml": 0.054,
+    "iot_aggregator": 0.263,
+    "traffic_monitor": 0.288,
+    "video_analytics": 0.263
+   },
+   "zone_mix": {
+    "z0": 0.049,
+    "z1": 0.215,
+    "z2": 0.083,
+    "z3": 0.059,
+    "z4": 0.088,
+    "z5": 0.039,
+    "z6": 0.054,
+    "z7": 0.078,
+    "z8": 0.137,
+    "z9": 0.2
+   },
+   "distinct_texts": 135
+  },
+  "B": {
+   "n": 425,
+   "type_mix": {
+    "ar_session": 0.089,
+    "crowd_safety": 0.026,
+    "digital_twin": 0.118,
+    "drone_control": 0.078,
+    "federated_ml": 0.16,
+    "iot_aggregator": 0.165,
+    "traffic_monitor": 0.193,
+    "video_analytics": 0.172
+   },
+   "zone_mix": {
+    "z0": 0.04,
+    "z1": 0.318,
+    "z2": 0.082,
+    "z3": 0.038,
+    "z4": 0.071,
+    "z5": 0.026,
+    "z6": 0.075,
+    "z7": 0.059,
+    "z8": 0.118,
+    "z9": 0.174
+   },
+   "distinct_texts": 285
+  },
+  "C": {
+   "n": 370,
+   "type_mix": {
+    "ar_session": 0.1,
+    "crowd_safety": 0.095,
+    "digital_twin": 0.111,
+    "drone_control": 0.073,
+    "ev_charging": 0.057,
+    "federated_ml": 0.108,
+    "iot_aggregator": 0.1,
+    "traffic_monitor": 0.124,
+    "video_analytics": 0.232
+   },
+   "zone_mix": {
+    "z0": 0.049,
+    "z1": 0.178,
+    "z2": 0.086,
+    "z3": 0.054,
+    "z4": 0.073,
+    "z5": 0.068,
+    "z6": 0.059,
+    "z7": 0.051,
+    "z8": 0.165,
+    "z9": 0.216
+   },
+   "distinct_texts": 259
+  },
+  "first_seen_s": {
+   "ar_session": 10.56,
+   "video_analytics": 26.21,
+   "iot_aggregator": 88.37,
+   "traffic_monitor": 143.78,
+   "federated_ml": 2657.01,
+   "digital_twin": 3890.91,
+   "drone_control": 5104.13,
+   "crowd_safety": 6227.54,
+   "ev_charging": 8168.64
+  }
+ }
+}

@@ -1,0 +1,581 @@
+{
+ "name": "eval",
+ "n_zones": 10,
+ "n_nodes": 50,
+ "zones": [
+  {
+   "zone_id": "z0",
+   "centroid": [
+    9.267060499328583,
+    45.42091608521409
+   ],
+   "activity_share": 0.0596,
+   "zone_to_global_ms": 35.48,
+   "nodes": [
+    {
+     "node_id": "n0",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n1",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n2",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n3",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  },
+  {
+   "zone_id": "z1",
+   "centroid": [
+    9.187673563154313,
+    45.46126453074483
+   ],
+   "activity_share": 0.2258,
+   "zone_to_global_ms": 28.78,
+   "nodes": [
+    {
+     "node_id": "n4",
+     "device_class": "rack_edge_server",
+     "cpu": 64.0,
+     "mem_gb": 512.0,
+     "power_w": 800.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n5",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n6",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n7",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n8",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n9",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n10",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n11",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n12",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  },
+  {
+   "zone_id": "z2",
+   "centroid": [
+    9.15497031093907,
+    45.5259638928584
+   ],
+   "activity_share": 0.0879,
+   "zone_to_global_ms": 37.17,
+   "nodes": [
+    {
+     "node_id": "n13",
+     "device_class": "rack_edge_server",
+     "cpu": 64.0,
+     "mem_gb": 512.0,
+     "power_w": 800.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n14",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n15",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n16",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n17",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n18",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  },
+  {
+   "zone_id": "z3",
+   "centroid": [
+    9.086199219108437,
+    45.43464786071951
+   ],
+   "activity_share": 0.0633,
+   "zone_to_global_ms": 33.95,
+   "nodes": [
+    {
+     "node_id": "n19",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n20",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n21",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n22",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  },
+  {
+   "zone_id": "z4",
+   "centroid": [
+    9.279090033255764,
+    45.523415830708906
+   ],
+   "activity_share": 0.0774,
+   "zone_to_global_ms": 21.88,
+   "nodes": [
+    {
+     "node_id": "n23",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n24",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n25",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n26",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n27",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  },
+  {
+   "zone_id": "z5",
+   "centroid": [
+    9.164861138100573,
+    45.390081573325354
+   ],
+   "activity_share": 0.0498,
+   "zone_to_global_ms": 39.51,
+   "nodes": [
+    {
+     "node_id": "n28",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n29",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  },
+  {
+   "zone_id": "z6",
+   "centroid": [
+    9.218510114425401,
+    45.53780473415771
+   ],
+   "activity_share": 0.0791,
+   "zone_to_global_ms": 35.22,
+   "nodes": [
+    {
+     "node_id": "n30",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n31",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n32",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n33",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n34",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  },
+  {
+   "zone_id": "z7",
+   "centroid": [
+    9.061493045905468,
+    45.52713963985192
+   ],
+   "activity_share": 0.0575,
+   "zone_to_global_ms": 35.72,
+   "nodes": [
+    {
+     "node_id": "n35",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n36",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  },
+  {
+   "zone_id": "z8",
+   "centroid": [
+    9.1500172886453,
+    45.46589278312907
+   ],
+   "activity_share": 0.1325,
+   "zone_to_global_ms": 22.56,
+   "nodes": [
+    {
+     "node_id": "n37",
+     "device_class": "rack_edge_server",
+     "cpu": 64.0,
+     "mem_gb": 512.0,
+     "power_w": 800.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n38",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n39",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n40",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n41",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n42",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  },
+  {
+   "zone_id": "z9",
+   "centroid": [
+    9.220044019442971,
+    45.48441890675376
+   ],
+   "activity_share": 0.1671,
+   "zone_to_global_ms": 29.01,
+   "nodes": [
+    {
+     "node_id": "n43",
+     "device_class": "rack_edge_server",
+     "cpu": 64.0,
+     "mem_gb": 512.0,
+     "power_w": 800.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n44",
+     "device_class": "jetson_orin_nano",
+     "cpu": 6.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": "gpu"
+    },
+    {
+     "node_id": "n45",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n46",
+     "device_class": "coral_dev_board",
+     "cpu": 4.0,
+     "mem_gb": 4.0,
+     "power_w": 4.0,
+     "accelerator": "edge_tpu"
+    },
+    {
+     "node_id": "n47",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n48",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    },
+    {
+     "node_id": "n49",
+     "device_class": "raspberry_pi_4",
+     "cpu": 4.0,
+     "mem_gb": 8.0,
+     "power_w": 15.0,
+     "accelerator": null
+    }
+   ]
+  }
+ ],
+ "inter_zone_rtt_ms": {
+  "z0-z1": 5.65,
+  "z0-z2": 7.35,
+  "z0-z3": 8.08,
+  "z0-z4": 6.02,
+  "z0-z5": 6.11,
+  "z0-z6": 6.64,
+  "z0-z7": 9.4,
+  "z0-z8": 6.61,
+  "z0-z9": 5.38,
+  "z1-z2": 5.21,
+  "z1-z3": 6.07,
+  "z1-z4": 6.21,
+  "z1-z5": 5.27,
+  "z1-z6": 5.48,
+  "z1-z7": 7.05,
+  "z1-z8": 4.3,
+  "z1-z9": 4.35,
+  "z2-z3": 6.31,
+  "z2-z4": 6.57,
+  "z2-z5": 6.89,
+  "z2-z6": 5.0,
+  "z2-z7": 5.76,
+  "z2-z8": 4.89,
+  "z2-z9": 5.34,
+  "z3-z4": 8.9,
+  "z3-z5": 5.68,
+  "z3-z6": 7.72,
+  "z3-z7": 5.82,
+  "z3-z8": 5.17,
+  "z3-z9": 7.06,
+  "z4-z5": 7.93,
+  "z4-z6": 4.94,
+  "z4-z7": 9.04,
+  "z4-z8": 7.03,
+  "z4-z9": 5.17,
+  "z5-z6": 7.44,
+  "z5-z7": 7.83,
+  "z5-z8": 5.34,
+  "z5-z9": 6.18,
+  "z6-z7": 7.45,
+  "z6-z8": 5.92,
+  "z6-z9": 4.71,
+  "z7-z8": 6.14,
+  "z7-z9": 7.63,
+  "z8-z9": 5.21
+ },
+ "intra_zone_ms": 1.0,
+ "zone_to_cloud_ms": [
+  20,
+  40
+ ],
+ "device_mix": {
+  "rack_edge_server": 4,
+  "jetson_orin_nano": 14,
+  "raspberry_pi_4": 20,
+  "coral_dev_board": 12
+ },
+ "provenance": {
+  "rtt": "RIPE Atlas metro-area anchor measurements (published calibration constants)",
+  "nodes": "device_specs.py (vendor datasheets)",
+  "cells": "OpenData Milano grid (Telecom Italia)",
+  "weights": "Milan activity trace (Harvard Dataverse)"
+ }
+}

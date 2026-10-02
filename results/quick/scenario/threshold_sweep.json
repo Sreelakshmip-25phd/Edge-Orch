@@ -1,0 +1,107 @@
+{
+ "backend": "minilm",
+ "n_library": 210,
+ "n_queries": 158,
+ "target_precision": 0.98,
+ "chosen": 0.65,
+ "rows": [
+  {
+   "threshold": 0.3,
+   "hit_rate_known": 1.0,
+   "false_hit_rate_unseen": 1.0,
+   "precision": 0.9051,
+   "n_hits": 158
+  },
+  {
+   "threshold": 0.35,
+   "hit_rate_known": 1.0,
+   "false_hit_rate_unseen": 1.0,
+   "precision": 0.9051,
+   "n_hits": 158
+  },
+  {
+   "threshold": 0.4,
+   "hit_rate_known": 1.0,
+   "false_hit_rate_unseen": 1.0,
+   "precision": 0.9051,
+   "n_hits": 158
+  },
+  {
+   "threshold": 0.45,
+   "hit_rate_known": 0.9932,
+   "false_hit_rate_unseen": 0.8182,
+   "precision": 0.9161,
+   "n_hits": 155
+  },
+  {
+   "threshold": 0.5,
+   "hit_rate_known": 0.966,
+   "false_hit_rate_unseen": 0.5455,
+   "precision": 0.9324,
+   "n_hits": 148
+  },
+  {
+   "threshold": 0.55,
+   "hit_rate_known": 0.9116,
+   "false_hit_rate_unseen": 0.5455,
+   "precision": 0.9429,
+   "n_hits": 140
+  },
+  {
+   "threshold": 0.6,
+   "hit_rate_known": 0.7959,
+   "false_hit_rate_unseen": 0.2727,
+   "precision": 0.975,
+   "n_hits": 120
+  },
+  {
+   "threshold": 0.65,
+   "hit_rate_known": 0.6531,
+   "false_hit_rate_unseen": 0.0909,
+   "precision": 0.9897,
+   "n_hits": 97
+  },
+  {
+   "threshold": 0.7,
+   "hit_rate_known": 0.4966,
+   "false_hit_rate_unseen": 0.0909,
+   "precision": 0.9865,
+   "n_hits": 74
+  },
+  {
+   "threshold": 0.75,
+   "hit_rate_known": 0.415,
+   "false_hit_rate_unseen": 0.0,
+   "precision": 1.0,
+   "n_hits": 61
+  },
+  {
+   "threshold": 0.8,
+   "hit_rate_known": 0.2585,
+   "false_hit_rate_unseen": 0.0,
+   "precision": 1.0,
+   "n_hits": 38
+  },
+  {
+   "threshold": 0.85,
+   "hit_rate_known": 0.1156,
+   "false_hit_rate_unseen": 0.0,
+   "precision": 1.0,
+   "n_hits": 17
+  },
+  {
+   "threshold": 0.9,
+   "hit_rate_known": 0.068,
+   "false_hit_rate_unseen": 0.0,
+   "precision": 1.0,
+   "n_hits": 10
+  },
+  {
+   "threshold": 0.95,
+   "hit_rate_known": 0.0068,
+   "false_hit_rate_unseen": 0.0,
+   "precision": 1.0,
+   "n_hits": 1
+  }
+ ]
+}

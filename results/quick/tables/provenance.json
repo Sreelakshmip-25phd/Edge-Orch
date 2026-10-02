@@ -1,0 +1,56 @@
+{
+ "profile": "quick",
+ "systems": [
+  "full",
+  "no_memory",
+  "no_digest",
+  "memory_ablated",
+  "no_intent_cache",
+  "no_preempt_degrade",
+  "no_zone_tier",
+  "no_cross_zone",
+  "greedy_oracle",
+  "rule_based",
+  "core",
+  "react",
+  "agentedge",
+  "lats"
+ ],
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "latency_source": {
+  "full": "calibrated",
+  "no_memory": "calibrated",
+  "no_digest": "calibrated",
+  "memory_ablated": "calibrated",
+  "no_intent_cache": "calibrated",
+  "no_preempt_degrade": "calibrated",
+  "no_zone_tier": "calibrated",
+  "no_cross_zone": "calibrated",
+  "greedy_oracle": "calibrated",
+  "rule_based": "calibrated",
+  "core": "calibrated",
+  "react": "calibrated",
+  "agentedge": "calibrated",
+  "lats": "calibrated"
+ },
+ "llm": {
+  "full": "real",
+  "no_memory": "real",
+  "no_digest": "real",
+  "memory_ablated": "real",
+  "no_intent_cache": "real",
+  "no_preempt_degrade": "real",
+  "no_zone_tier": "real",
+  "no_cross_zone": "real",
+  "greedy_oracle": "real",
+  "rule_based": "real",
+  "core": "real",
+  "react": "real",
+  "agentedge": "real",
+  "lats": "real"
+ }
+}
