@@ -75,7 +75,8 @@ HORIZON_S = 86400.0              # one simulated day
 #         repo's own tests. Its numbers are NOT results.
 # small : real datasets + real LLM, reduced size - a quick sanity run on
 #         the GPU machine before committing to the full campaign.
-# full  : the evaluation campaign (10k+ requests/day, >= 10 seeds).
+# medium: the main campaign actually run (6k requests/day, 5 seeds).
+# full  : the original campaign size (12k requests/day, 10 seeds).
 PROFILES = {
     "smoke": {"data": "synthetic", "n_requests": 600, "n_zones": 4,
               "seeds": [0, 1], "llm": "mock", "n_devices": 120,
@@ -91,6 +92,13 @@ PROFILES = {
     "small": {"data": "real", "n_requests": 2000, "n_zones": 10,
               "seeds": [0, 1, 2], "llm": "real", "n_devices": 400,
               "horizon_s": HORIZON_S},
+    # medium: the main campaign that fits in about a day of GPU time - the
+    # real 24 h day of "full" (night, surge, new service types), half the
+    # requests, 5 seeds. The agentic baselines (ReAct, AgentEdge, LATS; 20-70x
+    # the model calls of full) are compared on "quick" instead (3 seeds).
+    "medium": {"data": "real", "n_requests": 6000, "n_zones": 10,
+               "seeds": [0, 1, 2, 3, 4], "llm": "real", "n_devices": 1200,
+               "horizon_s": HORIZON_S},
     "full": {"data": "real", "n_requests": 12000, "n_zones": 10,
              "seeds": SEEDS, "llm": "real", "n_devices": 2400,
              "horizon_s": HORIZON_S},

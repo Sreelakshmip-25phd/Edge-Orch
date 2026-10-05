@@ -14,7 +14,7 @@ figures/) is the appendix.
   fig4_setup_latency      setup latency split into its components
 
 Conventions: mean ± 95% CI over seeds; "*" = paired t-test vs full
-significant after Holm correction (p < 0.05); "n/a" = the metric does not
+significant after Holm correction within its table (p < 0.05); "n/a" = the metric does not
 apply to that system (e.g. greedy_oracle is handed the true service type, so
 it has no translation accuracy or translation latency to compare).
 Deployment (container start-up) time is NOT part of setup latency: it is an
@@ -254,7 +254,15 @@ def fig_setup_latency(plt, runs, seeds, systems, path, tag):
 
 
 # --- entry point --------------------------------------------------------------------
-def write_main(out, runs, present, seeds, tests, ablations, baselines, isolates, group):
+EXPERIMENT = {
+    "medium": "Experiment 1 - main campaign: 6,000 requests over a 24 h day, 5 seeds",
+    "quick": ("Experiment 2 - agentic baselines: 1,000 requests over a compressed 3 h day "
+              "(compare numbers only within this experiment)"),
+}
+
+
+def write_main(out, runs, present, seeds, tests, ablations, baselines, isolates, group,
+               profile=""):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -266,7 +274,9 @@ def write_main(out, runs, present, seeds, tests, ablations, baselines, isolates,
     n = {s: sum((s, k) in runs for k in seeds) for s in present}
     note = ("Mean ± 95% CI over seeds (seeds per system: "
             + ", ".join(f"{s} {n[s]}" for s in present) + "). "
-            "* = differs from full, paired t-test, Holm-corrected p < 0.05.\n\n")
+            "* = differs from full, paired t-test, Holm-corrected within this table, p < 0.05.\n\n")
+    if profile:
+        note = f"**{EXPERIMENT.get(profile, 'profile ' + profile)}** (profile `{profile}`).\n\n" + note
     if "full" in present:
         rows, cols = table_baselines(runs, seeds, tests, [b for b in baselines if b in present])
         open(os.path.join(out, "table_baselines.md"), "w").write(

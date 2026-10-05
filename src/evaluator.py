@@ -291,8 +291,9 @@ def ci95(vals):
 
 def paired_tests(runs, systems, seeds, metrics, ref="full"):
     """Paired over seeds (same workload file per seed): paired t-test and
-    Wilcoxon signed-rank, Holm-adjusted across the compared systems per
-    metric."""
+    Wilcoxon signed-rank (needs >= 6 seeds to be able to reach p < 0.05),
+    t-test p Holm-adjusted per metric within each family (ablations,
+    baselines)."""
     from scipy import stats
     rows = []
     for m in metrics:
@@ -317,12 +318,17 @@ def paired_tests(runs, systems, seeds, metrics, ref="full"):
             block.append({"metric": m, "system": s, "n_pairs": len(pairs),
                           "ref_mean": float(a.mean()), "sys_mean": float(b.mean()),
                           "diff_mean": float(d.mean()), "t_p": t_p, "wilcoxon_p": w_p})
-        # Holm adjustment over this metric's comparisons (t-test p)
-        order = sorted(range(len(block)), key=lambda i: block[i]["t_p"])
-        m_n, running = len(block), 0.0
-        for rank, i in enumerate(order):
-            running = max(running, min(1.0, (m_n - rank) * block[i]["t_p"]))
-            block[i]["t_p_holm"] = running
+        # Holm adjustment over this metric's comparisons (t-test p), within
+        # each family: the ablations (Table 2) and the baselines (Table 1)
+        # answer different questions, so each is corrected on its own
+        for fam in {GROUP.get(b["system"], "") for b in block}:
+            fb = [b for b in block if GROUP.get(b["system"], "") == fam]
+            fb.sort(key=lambda b: b["t_p"])
+            running = 0.0
+            for rank, b in enumerate(fb):
+                running = max(running, min(1.0, (len(fb) - rank) * b["t_p"]))
+                b["t_p_holm"] = running
+                b["holm_family"] = fam
         rows += block
     return rows
 
@@ -407,7 +413,8 @@ def _write_group_comparisons(runs, systems, seeds, tests, tdir):
     head = ("Differences vs full: quality = system minus full in percentage points "
             "(negative = worse than full, except locality violations where negative = "
             "fewer); cost = system / full (above 1.00x = more expensive than full). "
-            "* = paired t-test vs full significant after Holm correction (p < 0.05).\n\n")
+            "* = paired t-test vs full significant after Holm correction within this table "
+            "(p < 0.05).\n\n")
     for group, members in (("ablations", ABLATIONS), ("baselines", BASELINES)):
         sel = [s for s in members if s in systems]
         if not sel:
@@ -719,7 +726,8 @@ def report(profile, systems, seeds):
     import report
     tests = paired_tests(runs, present, seeds, KEY_METRICS)
     main_dir = report.write_main(os.path.join(results_dir(profile), "main"), runs, present, seeds,
-                                 tests, ABLATIONS, BASELINES, ablations.ISOLATES, GROUP)
+                                 tests, ABLATIONS, BASELINES, ablations.ISOLATES, GROUP,
+                                 profile=profile)
     print(f"main results -> {main_dir}")
     print(f"appendix: tables -> {os.path.join(results_dir(profile), 'tables')}, figures -> {fdir}")
 

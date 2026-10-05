@@ -31,7 +31,8 @@ def main():
     import ablations
     tests = E.paired_tests(runs, systems, seeds, E.KEY_METRICS)
     out = report.write_main(os.path.join(results_dir(a.profile), "main"), runs, systems, seeds,
-                            tests, E.ABLATIONS, E.BASELINES, ablations.ISOLATES, E.GROUP)
+                            tests, E.ABLATIONS, E.BASELINES, ablations.ISOLATES, E.GROUP,
+                            profile=a.profile)
     mc = os.path.join(RESULTS, "model_comparison", "model_comparison.csv")
     if os.path.exists(mc):
         df = pd.read_csv(mc)

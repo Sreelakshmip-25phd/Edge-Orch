@@ -53,7 +53,9 @@ git add src/latency_distributions.json && git commit -m "Measured LLM/SLM latenc
 
 # 4. run
 python main.py --profile small      # sanity: 2k requests x 3 seeds
-python main.py                      # full: 12k requests/day x 10 seeds x 13 systems
+python main.py --profile medium --systems proposed,ablations,simple   # Experiment 1: 6k requests/day x 5 seeds
+python main.py --profile quick --systems agentic                     # Experiment 2: 1k requests x 3 seeds
+python main.py                      # full: 12k requests/day x 10 seeds x 13 systems (about a month of GPU time)
 python scripts/paper_results.py --profile full
 
 # 5. multi-model comparison (probe + calibration + one full evaluation per tier)

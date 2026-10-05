@@ -519,6 +519,31 @@ against K = 48 (≈ 8 min of a 24 h day) in `full`. The quick profile is
 therefore for comparing systems on the same workload. Its absolute numbers
 are not comparable with the full campaign's.
 
+### The `medium` profile and the two experiments
+
+Running every system on `full` (12,000 requests/day × 10 seeds) would take
+about a month of GPU time, almost all of it in the agentic baselines: LATS
+alone needs about 3.5–4 GPU-hours per 1,000 requests. The evaluation is
+therefore split into two experiments, each paired on identical workloads:
+
+| experiment | profile | systems | seeds | estimated GPU time |
+|---|---|---|---|---|
+| 1, main | `medium`: 6,000 requests over the real 24 h day, 1,200 devices | full, 6 ablations, greedy_oracle, rule_based, core | 5 | about 20 h |
+| 2, agentic baselines | `quick`: 1,000 requests, compressed 3 h day | full vs react, agentedge, lats | 3 | about 6–7 h per seed |
+
+`medium` keeps the full day's drift: on seed 0, 1,135 / 2,560 / 2,305
+requests in the three thirds of the day, 238 / 697 / 875 distinct phrasings,
+and the new types first seen at 6.4 h (federated_ml) to 18.1 h (ev_charging).
+Its load factor is calibrated like the others: K = 128 gives greedy
+acceptance 0.803 (target 0.80–0.90). Numbers are compared only within an
+experiment, because the load factors differ.
+
+With 5 seeds the paired t-test is the significance test: a two-sided
+Wilcoxon test on 5 pairs cannot go below p = 0.0625 even when every pair
+agrees, so it is reported but cannot decide. Holm correction is applied per
+metric within each table (the ablations; the baselines). Seeds 5–9 can be
+added to `medium` later without re-running anything.
+
 ## 14. Known limitations
 
 - Services do not follow their user when the device moves. Mobility affects

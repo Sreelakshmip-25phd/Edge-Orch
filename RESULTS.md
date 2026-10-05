@@ -40,22 +40,28 @@ What the pilot showed and what was changed:
   The shared tool text, the running-services list, the step budget (7) and
   LATS re-expansion were fixed (ARCHITECTURE.md §8).
 
-## 2. Still to run (stage 3)
+## 2. Stage 3 quick run, Experiment 2's first part (3 seeds)
 
-1. Pull, and delete the pilot's quick outputs and caches: the prompts
-   changed, so cached LLM answers no longer match.
-2. `python scripts/run_parallel.py --workers 1 --profile quick --systems proposed,ablations,simple`,
-   then `--systems agentic`.
-3. Check `results/quick/main/` (2 tables, 4 figures); then the full campaign
-   (`--profile full`, 10 seeds) and `python scripts/paper_results.py --profile full`.
-4. `python scripts/run_model_sweep.py` for the model comparison.
+full, the 6 ablations, greedy_oracle, rule_based and core on quick seeds 0–2
+(30 runs, about 2 h on the GPU). Tables: `results/quick/main/` on the GPU
+machine. full: 92.0% accepted, 0.24 model calls/request (pilot 0.57),
+193 tokens/request (pilot 404), 126 ms setup latency (pilot 216 ms), cache
+misses about 10% (pilot about 38%). Removing the cache costs 4.6× calls,
+removing memory + digest 2.1×, removing cache sharing 2.2×, removing the
+zone tier 1.19× (in the pilot that ablation was cheaper); acceptance stays
+within ±0.5 pp in all four. CORE ties on acceptance (92.6%) at 5.8× the calls.
 
-The decision prompt changed after the latency calibration (choices by id).
-The calibrated `decide` latency was measured with the earlier prompt; it is
-similar in length, but re-running `scripts/calibrate_latency.py` before the
-full campaign removes the doubt.
+## 3. Still to run
 
-## 3. Smoke run (mock LLM; NOT results)
+See ARCHITECTURE.md "The `medium` profile and the two experiments".
+
+1. Experiment 2: react, agentedge, lats on quick seeds 0, 1, 2.
+2. Re-measure model latency (`scripts/calibrate_latency.py`): the decision
+   prompt changed after the last calibration.
+3. Experiment 1: `medium` profile, 10 systems × 5 seeds.
+4. `python scripts/paper_results.py --profile medium` and `--profile quick`.
+
+## 4. Smoke run (mock LLM; NOT results)
 
 `python main.py --profile smoke` runs every system end to end on synthetic
 data with the mock LLM and placeholder latencies, in a few minutes. It shows
