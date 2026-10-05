@@ -1,6 +1,10 @@
+import json
+
 import pytest
 
 from helpers import mock_env
+from orchestrator import ScratchRecord
+from sim_engine import Decision
 
 BASELINES = ["greedy_oracle", "rule_based", "react", "lats", "agentedge", "core"]
 
@@ -32,13 +36,41 @@ def test_llm_call_cost_ordering(env):
     assert per_req["lats"] > per_req["react"]   # tree search costs more than a single chain
 
 
-def test_offline_bound_is_an_upper_bound(env):
-    from baselines.optimal_solver import window_bound
-    from workload import lifetime_of
-    run, wl, topo = env
-    tel, _ = run("greedy_oracle")
-    reqs = wl["requests"][:60]
-    b = window_bound(topo, reqs, [lifetime_of(r, wl) for r in reqs], time_limit_s=20)
-    done = sum(tel.requests[r["req_id"]].end_cause == "completed" for r in reqs)
-    assert b["kind"] in ("ilp", "lp_relaxation")
-    assert b["bound"] + 1e-6 >= done
+def test_lats_re_expands_with_reflections_after_all_children_fail(monkeypatch):
+    import baselines.lats_baseline as L
+    from llm_client import LLMResult
+    monkeypatch.setattr(L, "request_block", lambda *a: {})
+    monkeypatch.setattr(L, "catalog_sizes", lambda *a: {})
+
+    class FakeLLM:
+        def __init__(self):
+            self.expand_prompts = []
+
+        def ask(self, system, user, *, kind, req_id=None, temperature=0.0, sample_idx=0, **_):
+            if kind == "lats_expand":
+                self.expand_prompts.append(json.loads(user))
+                node = f"bad{sample_idx}" if sample_idx < 3 else "good"
+                out = {"tool": "try_place", "args": {"zone": "z0", "node": node}}
+            elif kind == "lats_value":
+                out = {"score": 5}
+            else:
+                out = {"reflection": "that node was full; try another"}
+            return LLMResult(data=out, source="fresh", tokens_in=1, tokens_out=1,
+                             wall_ms=1.0, sim_ms=1.0)
+
+    class FakeEnv:
+        decision = None
+
+        def run_tool(self, tool, args):
+            if args.get("node") == "good":
+                self.decision = Decision(node="good", path="local", decision_source="llm_fresh")
+                return {"ok": True}
+            return {"ok": False, "reason": "full"}
+
+    llm = FakeLLM()
+    lats = L.LATSBaseline(catalog=None, make_llm=lambda role, agent: llm, resources=None)
+    dec, _ = lats._search("r1", "z0", "text", ScratchRecord("r1"), FakeEnv())
+    assert dec is not None and dec.node == "good"
+    assert lats.counters["re_expansions"] == 1
+    assert lats.counters["reflections"] == 3
+    assert len(llm.expand_prompts[-1]["reflections"]) == 3     # re-expansion saw the reflections

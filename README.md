@@ -3,7 +3,7 @@
 A three-tier multi-agent orchestrator that places services on edge/cloud
 infrastructure. SLMs and LLMs do the reasoning, and an intent cache and
 similar-case memory make those model calls unnecessary over time. The repo
-contains the full evaluation harness: 7 ablations, 6 baselines (incl. ReAct,
+contains the full evaluation harness: 6 ablations, 6 baselines (incl. ReAct,
 LATS, AgentEdge-style and CORE-style reimplementations), a non-stationary
 trace-driven workload, and every metric computed from one event log.
 
@@ -18,8 +18,8 @@ the cache and memory fill, without the acceptance rate suffering.
 | tier | code | does |
 |---|---|---|
 | 1 edge devices | `src/edge_device.py` | send pure natural-language intent; move between zones |
-| 2 zone agents (one per zone) | `src/zone_agent.py` | translate intent (cold intent cache, falling back to the SLM), place locally |
-| 3 global agent | `src/global_agent.py` | memory, then rules, then digest scan, then one verified structured LLM decision (place / pre-empt / degrade / reject), then rule chain |
+| 2 zone agents (one per zone) | `src/zone_agent.py` | translate intent (one cold intent cache shared by all zones, falling back to the SLM), place locally |
+| 3 global agent | `src/global_agent.py` | memory, then rules, then digest scan, then one LLM call that picks one of a list of pre-verified choices (place / pre-empt / degrade / reject) by id, then a fixed rule chain as a safety net |
 
 ## Quick start
 
@@ -53,7 +53,7 @@ git add src/latency_distributions.json && git commit -m "Measured LLM/SLM latenc
 
 # 4. run
 python main.py --profile small      # sanity: 2k requests x 3 seeds
-python main.py                      # full: 12k requests/day x 10 seeds x 14 systems
+python main.py                      # full: 12k requests/day x 10 seeds x 13 systems
 python scripts/paper_results.py --profile full
 
 # 5. multi-model comparison (probe + calibration + one full evaluation per tier)
@@ -97,17 +97,17 @@ python src/calibrate_workload.py --profile full --force # re-derive the load fac
 | `scenario/` | topology, activity matrices, threshold sweep, workload per seed (+ drift report), calibration K |
 | `runs/<system>/seed<k>.telemetry.jsonl.gz` | the complete event log of one run |
 | `runs/<system>/seed<k>.metrics.json` | every metric, computed only from that log |
-| `tables/` | `summary.md/csv` (mean ± 95% CI), `paired_tests_vs_full.csv`, latency comparisons, calls over time, pre-emption by priority, placements per zone |
-| `figures/` | outcomes, calls over time, latency, Pareto (success × latency × tokens), failures/pre-emption, tokens, load balance |
-| `paper/` | paper-ready subset (`scripts/paper_results.py`) |
+| `main/` | **the main results**: `table_baselines.md`, `table_ablations.md`, `fig1_calls_over_time.png`, `fig2_quality_vs_cost.png`, `fig3_acceptance_by_phase.png`, `fig4_setup_latency.png` (see `src/report.py`) |
+| `tables/` | appendix: `summary.md/csv` (mean ± 95% CI), `paired_tests_vs_full.csv`, latency comparisons, calls over time, pre-emption by priority, placements per zone |
+| `figures/` | appendix: outcomes, calls over time, latency, Pareto (success × latency × tokens), failures/pre-emption, tokens, load balance |
+| `main/table_models.md` | model comparison, written by `scripts/paper_results.py` when it exists |
 
 ## Systems compared
 
 - **proposed:** `full`
-- **ablations:** `no_memory`, `no_digest`, `memory_ablated`, `no_intent_cache`,
-  `no_preempt_degrade`, `no_zone_tier`, `no_cross_zone`
+- **ablations:** `no_memory` (memory, rules and digest), `no_intent_cache`,
+  `no_cache_sharing`, `no_preempt_degrade`, `no_zone_tier`, `no_cross_zone`
 - **baselines:** `greedy_oracle`, `rule_based`, `react`, `lats`, `agentedge`, `core`
-- **offline ceiling:** `src/baselines/optimal_solver.py`. Optional; not an online system.
 
 See ARCHITECTURE.md for what each one isolates or reimplements.
 

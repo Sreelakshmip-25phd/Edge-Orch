@@ -1,116 +1,63 @@
 # Results so far
 
-This repo was written on a machine **without a GPU or model server**. Two
-kinds of runs have been done there:
+## 1. Quick pilot on the GPU machine (superseded design)
 
-1. **Real data, no model.** Scenario, workload and load calibration for the
-   `full` profile, plus the two baselines that need no LLM, on all 10 seeds.
-   These numbers are real.
-2. **Smoke.** All 14 systems end to end on synthetic data with the **mock
-   LLM** and placeholder latencies. These only show that the pipeline works;
-   they are **not results**.
+Profile `quick`: 1,000 requests over a compressed 3-hour day, 10 zones,
+3 seeds (ReAct, LATS and AgentEdge: seed 0 only). Models: Llama-3.2-3B
+(SLM) and Qwen2.5-7B (LLM) on an RTX 4070 SUPER, with calibrated latencies.
+The raw outputs are on the `results-quick` branch.
 
-Everything involving an SLM/LLM (the proposed system, all ablations, ReAct,
-LATS, AgentEdge-style, CORE-style, the model comparison, and the latency
-calibration) still has to be run on the GPU machine. See "Still to run" below.
+This pilot ran the design *before* the stage-3 changes (ARCHITECTURE.md §5–8):
+per-zone caches, the `allowed_actions` decision prompt, ReAct with 6 steps and
+the old tool text, and LATS without re-expansion. Its numbers motivated those
+changes and are not the paper's results.
 
-## 1. Real-data scenario (`--profile full`)
+| | accepted | model calls / req | setup latency |
+|---|---|---|---|
+| full | 92.2% | 0.57 | 216 ms |
+| core | 92.4% (tie) | 1.44 (2.5×) | 474 ms |
+| greedy_oracle | 85.9%, but 36.5% locality violations | 0 | n/a (given type) |
+| rule_based | 73.8% | 0 | 14 ms |
+| agentedge (1 seed) | 74.4% | 6.05 | 2,755 ms |
+| lats (1 seed) | 65.7% | 16.97 | 11,043 ms |
+| react (1 seed) | 31.3% | 4.90 | 3,605 ms |
 
-The topology is 10 KMeans zones over the Milan grid with 50 nodes: 4 rack
-servers (only in the 4 busiest zones), 14 Jetson Orin Nano, 20 Raspberry
-Pi 4 and 12 Coral boards.
+What the pilot showed and what was changed:
 
-- **Workload:** 12,000 requests per simulated day per seed, from 2,400 mobile
-  devices. Base day 2013-11-07, surge day 2013-11-13, surge zone z5.
-- **Drift evidence (seed 0):**
-  - requests per phase A/B/C: 2358 / 5054 / 4588;
-  - distinct phrasings per phase: 265 / 829 / 1212;
-  - first appearance: `federated_ml` 6.3 h, `digital_twin` 7.8 h,
-    `drone_control` 10.1 h, `crowd_safety` 13.5 h (registered 14.5 h),
-    `ev_charging` 17.4 h (never registered);
-  - 0 forced device picks (mobility never had to teleport a device).
-- **Failures:** 3–14 node failures per seed (mean 8.6), sampled from the
-  Google trace renewal model.
-- **Intent-cache threshold:** 0.65, the lowest threshold with hit precision
-  ≥ 0.98 when unseen-type phrasings count as false hits. The old repo's 0.3
-  gives a 100% false-hit rate on unseen types (see ARCHITECTURE.md §5).
-- **Load calibration:** K = 48, which gives greedy acceptance 0.847 on seed 0
-  (target band 0.80–0.90). This is the same K the old repo found.
+- **Cache and memory cut calls with no loss of acceptance.** Without the cache
+  the system needed 2.05× the calls; without memory and digest, 1.41×, with
+  savings growing from 3% to 34% over the day. Digest-only and memory-only
+  ablations had no significant effect alone, so they were merged into one
+  `no_memory` ablation.
+- **Per-zone caches missed what other zones had learned.** 83–85% of zone
+  cache misses were phrases another zone had already translated. The zones
+  now share one cache, and `no_cache_sharing` measures the effect.
+- **The LLM failed to copy fields back.** 12–19 decisions per seed failed
+  verification twice, mostly degrade answers with `zone: null`. The LLM now
+  answers with the id of a pre-verified choice.
+- **ReAct spent its steps reading.** In 519 of its 687 rejections it never
+  tried a placement. **LATS gave up** once the root's first children failed.
+  The shared tool text, the running-services list, the step budget (7) and
+  LATS re-expansion were fixed (ARCHITECTURE.md §8).
 
-## 2. Real-data baselines without an LLM (10 seeds, mean ± 95% CI)
+## 2. Still to run (stage 3)
 
-| metric | greedy_oracle | rule_based |
-|---|---|---|
-| acceptance | 0.834 ± 0.007 | 0.716 ± 0.003 |
-| completion | 0.832 ± 0.007 | 0.714 ± 0.003 |
-| escalation success | 0.812 ± 0.007 | 0.227 ± 0.006 |
-| acceptance A / B / C | 0.999 / 0.805 / 0.781 | 0.967 / 0.724 / 0.578 |
-| acceptance of the two new service types | 0.885 ± 0.013 | 0.128 ± 0.004 |
-| service-type accuracy | 1.000 (oracle-typed) | 0.829 ± 0.002 |
-| locality violations (zone_local placed elsewhere) | **0.377 ± 0.005** | 0.0003 |
-| cross-zone share of placements | 0.861 | 0.116 |
-| services lost to node failures (per run) | 19 ± 17 | 19.7 ± 12 |
-| mean total latency (ms, incl. deployment) | 1318 ± 16 | 1892 ± 24 |
+1. Pull, and delete the pilot's quick outputs and caches: the prompts
+   changed, so cached LLM answers no longer match.
+2. `python scripts/run_parallel.py --workers 1 --profile quick --systems proposed,ablations,simple`,
+   then `--systems agentic`.
+3. Check `results/quick/main/` (2 tables, 4 figures); then the full campaign
+   (`--profile full`, 10 seeds) and `python scripts/paper_results.py --profile full`.
+4. `python scripts/run_model_sweep.py` for the model comparison.
 
-What this already shows:
-
-- **Acceptance and completion differ** once failures are sampled, and escalation success
-  is a separate number again.
-- **The greedy reference buys its acceptance by ignoring data locality.** It
-  places 38% of zone-local services outside their zone. This is now measured
-  instead of hidden.
-- **A static rule library does not survive the non-stationary workload.**
-  Rule-based acceptance falls from 0.97 in phase A to 0.58 in phase C.
-- **Rule-based accepted 12.8% of the two new types' requests**, which it has
-  no templates for. It only could by mapping them onto a known type: these
-  are false cache hits, the risk §5 of ARCHITECTURE.md describes.
-
-Tables are in `results/full/tables/` and figures in `results/full/figures/`
-(both gitignored; `python main.py` regenerates them deterministically).
-
-Runtime on this CPU host: `greedy_oracle` takes about 15 s per seed.
-`rule_based` took 134–350 s per seed and got slower over the batch; that is
-worth profiling before the full campaign.
+The decision prompt changed after the latency calibration (choices by id).
+The calibrated `decide` latency was measured with the earlier prompt; it is
+similar in length, but re-running `scripts/calibrate_latency.py` before the
+full campaign removes the doubt.
 
 ## 3. Smoke run (mock LLM; NOT results)
 
-This is `python main.py --profile smoke`: 600 requests over a compressed
-6-hour day, 4 synthetic zones, 2 seeds, all 14 systems. It runs from scratch
-in about 2.5 minutes. It demonstrates that every system, the metrics, paired
-tests, tables and figures work end to end. Model invocations per request
-(mean of 2 seeds):
-
-| system | invocations/req | system | invocations/req |
-|---|---|---|---|
-| full | 0.51 | react | 3.0 |
-| no_memory | 0.61 | agentedge | 5.6 |
-| no_digest | 0.83 | lats | 10.9 |
-| memory_ablated | 1.15 | core | 1.4 |
-| no_intent_cache | 1.16 | greedy_oracle / rule_based | 0 |
-
-These are mock-LLM numbers. They show the mechanisms are wired correctly
-(removing memory, digest or cache raises model usage; LATS is the most
-expensive by design), but say nothing about real model behaviour.
-
-## 4. Still to run on the GPU machine
-
-The first GPU attempt (3 seeds of `full`, then interrupted) was made with
-code that has since changed: the deployment-latency fix, trust-based cache
-auditing, pre-verified LLM options and 3 memory candidates per escalation
-(ARCHITECTURE.md §4–6). Those 3 seeds must be discarded.
-
-1. Pull, then delete the old outputs and caches of the full profile:
-   `results/full/runs/` and `cache/full/` (keep `results/full/scenario/`:
-   topology, workloads and K are unchanged).
-2. Commit `src/latency_distributions.json` from the GPU machine if not yet done.
-3. `python scripts/run_parallel.py --workers N --slm <slm> --llm <llm>` for all
-   14 systems x 10 seeds (or `python main.py`, sequentially).
-4. `python scripts/run_model_sweep.py`: probe, latency calibration and one
-   end-to-end evaluation per local tier, plus the hosted reference probe.
-5. `python scripts/paper_results.py --profile full`, then update this file
-   with the real tables. The call-reduction claim is to be read from the
-   need-normalised measures and the savings vs ablations
-   (ARCHITECTURE.md "Measuring model calls fall over time"), next to the
-   raw per-request curve.
-6. Optional: `scripts/generate_device_calibration.py --measure-container-start --device-class rack_edge_server`
-   to replace the assumed container start time for the server class.
+`python main.py --profile smoke` runs every system end to end on synthetic
+data with the mock LLM and placeholder latencies, in a few minutes. It shows
+that the pipeline, metrics, tests, tables and figures work; its numbers say
+nothing about real model behaviour.

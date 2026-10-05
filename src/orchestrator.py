@@ -2,7 +2,7 @@
 agent, wired together. ablations.py switches individual mechanisms off
 through the constructor flags; nothing else differs between them.
 
-    handle(request):  zone agent translates (cache -> SLM)
+    handle(request):  zone agent translates (shared intent cache -> SLM)
                       zone agent tries local placement
                       else escalate to the global agent
                            (memory -> rules -> digest -> LLM -> rule chain)
@@ -16,7 +16,7 @@ import numpy as np
 
 from global_agent import GlobalAgent
 from sim_engine import Decision
-from zone_agent import ZoneAgent
+from zone_agent import IntentLibrary, ZoneAgent
 
 SURGE_POLICY = {"w_fit": 0.2, "w_balance": 0.7, "w_accel": 0.05, "w_cap": 0.05}
 
@@ -51,21 +51,28 @@ class HierarchicalOrchestrator:
                  seed_entries=(), cache_cap=500, shadow_rate=0.05,
                  use_cache=True, use_memory=True, use_digest=True, use_llm=True,
                  use_preempt_degrade=True, use_zone_tier=True, use_cross_zone=True,
-                 use_procedural=True, name=None):
+                 use_procedural=True, use_cache_sharing=True, cache_sync_s=5.0, name=None):
         if name:
             self.name = name
         self.catalog, self.topo = catalog, topo
         self.flags = dict(use_cache=use_cache, use_memory=use_memory, use_digest=use_digest,
                           use_llm=use_llm, use_preempt_degrade=use_preempt_degrade,
                           use_zone_tier=use_zone_tier, use_cross_zone=use_cross_zone,
-                          use_procedural=use_procedural)
+                          use_procedural=use_procedural, use_cache_sharing=use_cache_sharing)
         self.zone_ids = [z["zone_id"] for z in topo["zones"]]
         self.use_zone_tier, self.use_cross_zone = use_zone_tier, use_cross_zone
         mk = dict(threshold=threshold, cache_cap=cache_cap, shadow_rate=shadow_rate,
                   seed_entries=seed_entries, use_cache=use_cache)
+        self.shared_lib = None
         if use_zone_tier:
+            if use_cache and use_cache_sharing:
+                # one operator, one cache: same total capacity as the
+                # per-zone caches it replaces
+                self.shared_lib = IntentLibrary(embedder, threshold, cache_cap * len(self.zone_ids),
+                                                seed_entries, sync_s=cache_sync_s)
             self.zones = {z: ZoneAgent(z, catalog, embedder, make_llm("slm", f"zone:{z}"),
-                                       rng=np.random.default_rng(rng.integers(1 << 31)), **mk)
+                                       rng=np.random.default_rng(rng.integers(1 << 31)),
+                                       library=self.shared_lib, **mk)
                           for z in self.zone_ids}
             self.central = None
         else:
@@ -155,6 +162,9 @@ class HierarchicalOrchestrator:
         for za in self._agents():
             for k, v in za.stats().items():
                 agg[k] = agg.get(k, 0) + v
+        if self.shared_lib is not None:
+            agg["cache_entries"] = len(self.shared_lib)
+            agg["cache_evictions"] = self.shared_lib.evictions
         agg.update(self.global_.stats())
         agg["surge_policies"] = self.surge_policies
         return agg

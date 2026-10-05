@@ -1,5 +1,6 @@
 """Auto-generated, auto-scored reasoning cases for the global agent's
-one-call structured decision (DECIDE_SYS in src/global_agent.py).
+one-call structured decision (DECIDE_SYS in src/global_agent.py): the
+model answers with the id of one entry of "choices".
 
 Replaces the old 4 hand-written cases with 100 deterministic ones built in
 exactly the JSON shape GlobalAgent._prompt() sends:
@@ -17,7 +18,12 @@ PREFERRED answer by a documented heuristic:
              if its level >= 0.8, else the preferred victim
 """
 import json
+import os
 import random
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+from global_agent import build_choices, resolve_choice  # noqa: E402
 
 PRIO = ["low", "normal", "high", "critical"]
 TYPES = {"traffic_monitor": ("interactive", "any", "normal", 0.4),
@@ -49,14 +55,24 @@ def _fill(zs, z, cpu_free, mem_free, rng):
                  util=round(rng.uniform(0.3, 0.95), 2), healthy_frac=1.0)
 
 
+def _shuffled_choices(options, zones, name):
+    """Same entries as the live prompt, in a per-case shuffled order, so a
+    model that always answers "o1" is not rewarded (the live system lists
+    choices nearest / mildest first)."""
+    ch = build_choices(options, {z: v["rtt_ms"] for z, v in zones.items()})
+    random.Random(name).shuffle(ch)
+    return [{**c, "id": f"o{i}"} for i, c in enumerate(ch, 1)]
+
+
 def _case(name, kind, profile, cpu, mem, origin, zones, options, acceptable, preferred, floor):
     body = {"request": {"profile": profile, "cpu": cpu, "mem": mem, "origin_zone": origin,
                         "degrade_floor": floor},
-            "zones": zones, "options": options,
-            "allowed_actions": [a for a in ("place", "preempt", "degrade") if options.get(a)] + ["reject"],
+            "zones": zones,
+            "choices": _shuffled_choices(options, zones, name),
             "memory_hints": {"failed_zones": []}}
     return {"name": name, "kind": kind, "user": json.dumps(body, sort_keys=True),
-            "options": options, "acceptable": acceptable, "preferred": preferred}
+            "options": options, "choices": body["choices"],
+            "acceptable": acceptable, "preferred": preferred}
 
 
 def generate(seed=7):
@@ -156,8 +172,12 @@ def _match(ans, target):
 
 
 def score(case, ans):
-    """-> dict(valid_json, acceptable, preferred)"""
-    ok_json = isinstance(ans, dict) and "action" in ans and "_parse_error" not in ans
+    """-> dict(valid_json, acceptable, preferred). The answer names a choice
+    id; it is mapped back to its action before matching."""
+    ok_json = isinstance(ans, dict) and "option" in ans and "_parse_error" not in ans
+    if ok_json:
+        ans, _ = resolve_choice(ans, case["choices"])
+        ans = ans or {}
     acc = ok_json and any(_match(ans, a) for a in case["acceptable"])
     pref = ok_json and _match(ans, case["preferred"])
     return {"valid_json": bool(ok_json), "acceptable": bool(acc), "preferred": bool(pref)}

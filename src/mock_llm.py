@@ -85,24 +85,20 @@ def translate(system, text, err_mod=25):
 
 def decide(user):
     u = json.loads(user)
-    opts, zones = u.get("options", {}), u.get("zones", {})
+    ch = u.get("choices", [])
     if _h(user) % 12 == 0 and "feedback" not in u:
-        return {"action": "place", "zone": "z999", "victim": None,
-                "degrade_level": None, "reason": "mock: injected invalid proposal"}
-    if opts.get("place"):
-        z = min(opts["place"], key=lambda z: zones.get(z, {}).get("rtt_ms", 0))
-        return {"action": "place", "zone": z, "victim": None, "degrade_level": None,
-                "reason": "mock: nearest feasible zone"}
-    if opts.get("preempt"):
-        v = opts["preempt"][0]
-        return {"action": "preempt", "zone": v["zone"], "victim": v["victim"],
-                "degrade_level": None, "reason": "mock: lowest-priority victim"}
-    if opts.get("degrade"):
-        d = max(opts["degrade"], key=lambda d: d["level"])
-        return {"action": "degrade", "zone": d["zone"], "victim": None,
-                "degrade_level": d["level"], "reason": "mock: mildest degradation"}
-    return {"action": "reject", "zone": None, "victim": None, "degrade_level": None,
-            "reason": "mock: nothing feasible"}
+        return {"option": "o999", "reason": "mock: injected invalid proposal"}
+    by = lambda a: [c for c in ch if c["action"] == a]          # noqa: E731
+    if by("place"):
+        c = min(by("place"), key=lambda c: c.get("rtt_ms") or 0)
+        return {"option": c["id"], "reason": "mock: nearest feasible zone"}
+    if by("preempt"):
+        return {"option": by("preempt")[0]["id"], "reason": "mock: lowest-priority victim"}
+    if by("degrade"):
+        c = max(by("degrade"), key=lambda c: c["degrade_level"])
+        return {"option": c["id"], "reason": "mock: mildest degradation"}
+    rej = by("reject")
+    return {"option": rej[0]["id"] if rej else None, "reason": "mock: nothing feasible"}
 
 
 def _fits(node, dem):

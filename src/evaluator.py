@@ -78,7 +78,7 @@ KEY_METRICS = ["acceptance_rate", "completion_rate", "escalation_success", "esca
                "translation_service_type_acc", "locality_violation_rate",
                "fail_rate_after_accept", "preempt_per_100req", "degrade_per_100req",
                "util_var_zones_mean", "cross_zone_share", "new_type_acceptance",
-               "acceptance_A", "acceptance_B", "acceptance_C"]
+               "acceptance_A", "acceptance_B", "acceptance_C", "cache_hit_shared_rate"]
 
 SEED_CACHE_PER_TYPE = 0          # cold start: the intent cache starts empty
 CACHE_CAP = 500
@@ -141,7 +141,7 @@ def build_system(name, ctx, catalog, make_llm, seed):
         return ablations.make(name, catalog=catalog, embedder=ctx.embedder, topo=ctx.topo,
                               make_llm=make_llm, threshold=ctx.threshold, rng=rng,
                               seed_entries=seed_entries, cache_cap=CACHE_CAP,
-                              shadow_rate=SHADOW_RATE)
+                              shadow_rate=SHADOW_RATE, cache_sync_s=DIGEST_S)
     kw = dict(catalog=catalog, embedder=ctx.embedder, topo=ctx.topo, make_llm=make_llm,
               threshold=ctx.threshold, resources=ctx.resources, train_pool=ctx.pools[0])
     cls = {"greedy_oracle": GreedyOracle, "rule_based": RuleBasedHierarchical,
@@ -470,7 +470,7 @@ def _write_breakdowns(runs, systems, seeds, tdir):
     savings_vs_ablations(runs, systems, seeds, tdir)
 
 
-SAVINGS_REFS = ("no_memory", "no_intent_cache", "memory_ablated", "no_digest")
+SAVINGS_REFS = ("no_memory", "no_intent_cache", "no_cache_sharing")
 
 
 def _inv_bins(run):
@@ -716,8 +716,12 @@ def report(profile, systems, seeds):
         print("no runs found - nothing to report")
         return
     fdir = figures(profile, runs, present, seeds)
-    print(f"tables -> {os.path.join(results_dir(profile), 'tables')}")
-    print(f"figures -> {fdir}")
+    import report
+    tests = paired_tests(runs, present, seeds, KEY_METRICS)
+    main_dir = report.write_main(os.path.join(results_dir(profile), "main"), runs, present, seeds,
+                                 tests, ABLATIONS, BASELINES, ablations.ISOLATES, GROUP)
+    print(f"main results -> {main_dir}")
+    print(f"appendix: tables -> {os.path.join(results_dir(profile), 'tables')}, figures -> {fdir}")
 
 
 def main(argv=None):

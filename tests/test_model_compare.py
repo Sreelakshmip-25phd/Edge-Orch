@@ -12,8 +12,12 @@ def test_reasoning_case_set_is_large_and_self_consistent():
     cs = RC.generate()
     assert 50 <= len(cs) <= 100
     for c in cs:
-        assert RC.score(c, dict(c["preferred"], degrade_level=c["preferred"].get("level")))["acceptable"]
-        assert not RC.score(c, {"action": "place", "zone": "z_nowhere"})["acceptable"]
+        pid = [o["id"] for o in c["choices"]
+               if RC._match({k: v for k, v in o.items() if k != "id"}, c["preferred"])]
+        assert len(pid) == 1
+        assert RC.score(c, {"option": pid[0]})["preferred"]
+        assert not RC.score(c, {"option": "o99"})["acceptable"]
+        assert not RC.score(c, {"action": "place", "zone": "z_nowhere"})["valid_json"]
 
 
 def test_model_compare_scores_a_target_with_the_mock(monkeypatch, tmp_path):

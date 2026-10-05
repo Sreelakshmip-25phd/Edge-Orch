@@ -5,8 +5,8 @@ a free-text thought with one tool call per step over the *same* cluster
 the proposed system manages - read_digest(zone), read_running_services(zone),
 try_place(zone, node, service_type[, evict, degrade_level]) - until a
 try_place succeeds, it calls finish, or the step cap is hit. The step cap
-is 6 (ReAct's own analysis found more steps stop helping; we use the
-5-7 range the brief specifies).
+is 7 (common.STEP_BUDGET; the top of the 5-7 range the brief specifies -
+the quick pilot's 6 left too few steps after the reads).
 
 No memory, no cache: every request reasons from scratch, including
 translation (the model names the service_type inside try_place). Every
@@ -15,9 +15,10 @@ step is one LLM call, logged with kind="react_step".
 from llm_client import LLMUnavailable
 from sim_engine import Decision
 
-from .common import TOOLS_DOC, ToolEnv, catalog_sizes, dumps, finish_decision, request_block
+from .common import (STEP_BUDGET, TOOLS_DOC, ToolEnv, catalog_sizes, dumps, finish_decision,
+                     request_block)
 
-MAX_STEPS = 6
+MAX_STEPS = STEP_BUDGET
 
 REACT_SYS = """You are an orchestration agent placing a service request on an edge cluster.
 Work step by step. At each step think briefly, then call ONE tool.

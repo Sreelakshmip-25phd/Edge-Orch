@@ -12,6 +12,8 @@ from global_agent import OBJECTIVE
 from scenario import PRIORITY_RANK, SERVICE_TYPES
 from sim_engine import EPS, Decision
 
+RUNNING_LIST_MAX = 8
+STEP_BUDGET = 7          # ReAct's step cap and LATS's tree depth
 GENERIC = {"latency_class": "interactive", "data_locality": "any", "priority": "normal"}
 
 
@@ -73,11 +75,24 @@ class ToolEnv:
              "mem_free": round(r["mem_free"], 2), "accel": r["accelerator"]}
             for n, r in sorted(tab.items()) if r["healthy"]]}
 
-    def read_running_services(self, zone):
+    def read_running_services(self, zone, service_type=None):
+        """Only the services that could be evicted for this request: strictly
+        lower priority than the request's (its service_type's catalog
+        priority, or the re-plan's own priority; below "critical" when
+        unknown), lowest priority and soonest-finishing first, at most
+        RUNNING_LIST_MAX. The quick pilot listed up to 25 services of any
+        priority, and ReAct spent its step budget reading them."""
         if zone not in self.view.zone_ids:
             return {"error": f"unknown zone {zone}"}
         self._rtt(zone)
-        return {"zone": zone, "running": self.view.running(zone)[:25]}
+        pr = self.priority_override or (profile_for(self.catalog, service_type)["priority"]
+                                        if service_type and self.catalog.known(service_type)
+                                        else "critical")
+        rank = PRIORITY_RANK.get(pr, 3)
+        run = [s for s in self.view.running(zone) if PRIORITY_RANK.get(s["priority"], 1) < rank]
+        run.sort(key=lambda s: (PRIORITY_RANK.get(s["priority"], 1), s["remaining_s"]))
+        return {"zone": zone, "evictable_for_priority": pr, "n_evictable": len(run),
+                "services": run[:RUNNING_LIST_MAX]}
 
     def try_place(self, zone, node, service_type, evict=None, degrade_level=1.0):
         if zone not in self.view.zone_ids:
@@ -128,7 +143,7 @@ class ToolEnv:
             if tool == "read_digest":
                 return self.read_digest(args.get("zone"))
             if tool == "read_running_services":
-                return self.read_running_services(args.get("zone"))
+                return self.read_running_services(args.get("zone"), args.get("service_type"))
             if tool == "try_place":
                 return self.try_place(args.get("zone"), args.get("node"),
                                       args.get("service_type"), args.get("evict"),
@@ -138,12 +153,22 @@ class ToolEnv:
         return {"error": f"unknown tool {tool!r}"}
 
 
-TOOLS_DOC = """Tools (call exactly one per step):
-- read_digest {"zone": z}: healthy nodes of zone z with free CPU cores / memory GB.
-- read_running_services {"zone": z}: services running in z (req_id, priority, remaining_s, cpu, mem, node).
-- try_place {"zone": z, "node": n, "service_type": t, "evict": req_id|null, "degrade_level": 1.0|0.8|0.6|0.4}:
-  deploy the request as service type t on node n (optionally evicting one strictly lower-priority
-  service on that node, or at a reduced resource level not below the type's floor). Commits on success.
+# Shared, word for word, by ReAct and LATS. Rewritten after the quick pilot,
+# where ReAct never called try_place in 519 of its 687 rejected requests:
+# the old text did not say that try_place checks the fit itself, nor when
+# reading running services is worth a step.
+TOOLS_DOC = """Tools (call exactly one per step; at most """ + str(STEP_BUDGET) + """ steps per request, and a
+request that is not placed by then is rejected):
+- try_place {"zone": z, "node": n, "service_type": t, "evict": req_id|null, "degrade_level": 1.0|0.8|0.6|0.4}
+  The ONLY way to serve the request. Deploys it as service type t on node n and commits on success.
+  It checks the fit itself and, on failure, says why (free CPU/memory vs. need), so trying a
+  promising node directly is cheap. Optionally evict ONE strictly lower-priority service running on
+  that node, or run at a reduced resource level (not below the type's floor).
+- read_digest {"zone": z}: the healthy nodes of zone z with their free CPU cores / memory GB.
+  Use it to find a node with room before calling try_place.
+- read_running_services {"zone": z, "service_type": t}: the services in z that a request of type t
+  may evict (strictly lower priority), lowest priority and soonest finishing first.
+  Only worth a step when no node has room and the request is high or critical priority.
 - finish {}: give up (the request is rejected).
 service_type must be a catalog name (or a short new snake_case name if nothing fits).
 data_locality "zone_local" services must stay in the origin zone.

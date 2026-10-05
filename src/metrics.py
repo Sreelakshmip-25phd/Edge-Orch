@@ -239,6 +239,15 @@ def compute(tel, n_bins=24):
                                                          esc_b[busy[h:]].sum())
     S["cache_miss_first_quarter"] = _rate(first - bins["cache_hits"][:q].sum(), first)
     S["cache_miss_last_quarter"] = _rate(last - bins["cache_hits"][-q:].sum(), last)
+    S["cache_hit_shared_rate"] = float(np.mean([bool(r.cache_hit_shared) for r in R])) if n else None
+    # cache metrics only exist for a system that has an intent cache (a
+    # lookup sets cache_similarity); elsewhere they would read "0% hits /
+    # 100% misses", which is not a measurement
+    if not any(r.cache_similarity is not None and r.translation_source != "static_rule"
+               for r in R):
+        for k in ("cache_hit_rate", "cache_hit_first_quarter", "cache_hit_last_quarter",
+                  "cache_miss_first_quarter", "cache_miss_last_quarter", "cache_hit_shared_rate"):
+            S[k] = None
 
     # --- (4) failures by cause -----------------------------------------------------
     causes = Counter(r.end_cause for r in R)

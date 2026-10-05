@@ -74,15 +74,20 @@ def test_llm_proposal_that_does_not_fit_is_rejected_and_retried_once():
     _occupy(sim, "x1", "n1", 5.5, 1.0, prio="high")
     _occupy(sim, "x2", "n2", 3.5, 1.0, prio="high")
     llm = ScriptedLLM(script={"decide": [
-        {"action": "place", "zone": "z1", "reason": "looks roomy"},       # not an option -> invalid
-        {"action": "preempt", "zone": "z0", "victim": "x0", "reason": "low priority"}]})
+        {"option": "o9", "reason": "looks roomy"},                        # not a choice -> invalid
+        {"option": "o1", "reason": "low priority"}]})                     # o1 = evict x0
     ga = GlobalAgent(llm, cat, sim.zone_ids, use_memory=False)
     ga.on_digest_tick(0.0, _digests(sim))
     prof = ground_truth_profile("video_analytics")       # high priority, zone_local
     rec = ScratchRecord("r1")
     dec = ga.escalate(0.0, sim, "r1", "z0", prof, DEM, ["z0"], rec)
     assert [c["kind"] for c in llm.calls] == ["decide", "decide"]
-    assert json.loads(llm.calls[0]["user"])["allowed_actions"] == ["preempt", "reject"]
+    choices = json.loads(llm.calls[0]["user"])["choices"]
+    assert choices[0] == {"id": "o1", "action": "preempt", "zone": "z0", "victim": "x0",
+                          "victim_priority": "low", "victim_service_type": choices[0]["victim_service_type"],
+                          "victim_remaining_s": choices[0]["victim_remaining_s"],
+                          "rtt_ms": choices[0]["rtt_ms"]}
+    assert "place" not in {c["action"] for c in choices} and choices[-1]["action"] == "reject"
     assert "feedback" in json.loads(llm.calls[1]["user"])   # retry carries the verifier's error
     assert rec.llm_verified and rec.llm_retries == 1
     assert dec.action == "preempt" and dec.victims == ["x0"] and dec.path == "preempt_local"
@@ -91,7 +96,7 @@ def test_llm_proposal_that_does_not_fit_is_rejected_and_retried_once():
 def test_llm_invalid_twice_falls_back_to_rule_chain():
     sim, cat = _sim([req(1, 0, "z0", "video_analytics", 3, 1, 10)])
     _occupy(sim, "x0", "n0", 3.5, 1.0, prio="low")
-    llm = ScriptedLLM(default={"action": "place", "zone": "z9"})
+    llm = ScriptedLLM(default={"option": "o9"})
     ga = GlobalAgent(llm, cat, sim.zone_ids, use_memory=False)
     ga.on_digest_tick(0.0, _digests(sim))
     rec = ScratchRecord("r1")

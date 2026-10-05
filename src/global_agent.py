@@ -5,8 +5,8 @@ Escalation chain for a request its zone agent could not place locally:
   1. episodic (similar-case) memory  - no LLM call if a good match exists
   2. procedural rules                - distilled from episodic memory
   3. cross-zone digest scan          - deterministic, latency-aware
-  4. ONE structured LLM decision     - {action: place|preempt|degrade|reject,
-                                        zone, victim, degrade_level, reason}
+  4. ONE structured LLM decision     - picks one id from a list of pre-verified
+                                        choices (place / preempt / degrade / reject),
      verified against the live capacity solver; one retry with the
      verification error as feedback; then
   5. the deterministic rule chain    - place -> pre-empt -> degrade -> reject
@@ -60,21 +60,48 @@ priority one; the evicted service is migrated elsewhere if possible. Choose reje
 when every available option is clearly worse than not serving the request."""
 
 DECIDE_SYS = """You are the global coordinator of a three-tier edge orchestrator. A service
-request could not be placed by its zone agent. Choose exactly ONE action.
+request could not be placed by its zone agent. Pick exactly ONE entry of "choices".
 """ + OBJECTIVE + """
-Respond with ONLY a JSON object:
-{"action": "place"|"preempt"|"degrade"|"reject", "zone": "<zone id or null>",
- "victim": "<req_id or null>", "degrade_level": <number or null>, "reason": "<one sentence>"}
-Rules (every option listed has been checked to fit right now):
-- "action" MUST be one of allowed_actions. An action is only allowed when it has options.
-- "place": zone must be one of options.place.
-- "preempt": victim must be one of options.preempt; zone = that victim's zone.
-- "degrade": (zone, degrade_level) must be exactly one entry of options.degrade.
-- "reject": serve nothing.
+Every entry of "choices" has been checked to fit right now. Its "action" means:
+- "place": run the service at full size in that zone.
+- "preempt": evict the listed victim (a strictly lower-priority service) and run the service
+  on its node.
+- "degrade": run the service in that zone at degrade_level x its requested CPU/memory.
+- "reject": serve nothing (offered only when no full-size placement exists).
+Respond with ONLY a JSON object: {"option": "<the id of one choice, e.g. o1>", "reason": "<one sentence>"}
 Guidance: a full-size placement beats pre-emption or degradation; latency-sensitive (realtime)
 services should stay close (low rtt_ms); when pre-empting, prefer victims that are low priority
 and nearly finished; prefer the mildest degradation (highest level) available; avoid zones
 listed in memory_hints.failed_zones."""
+
+
+def build_choices(options, rtt):
+    """Flatten the verified options into the id-labelled list the LLM picks
+    from (added after the quick pilot: asked to copy zone / level / victim
+    back, Qwen2.5-7B left a field empty in ~half of its degrade answers, so
+    a correct choice failed verification). rtt: zone -> rtt_ms."""
+    ch = [{"action": "place", "zone": z, "rtt_ms": rtt.get(z)} for z in options.get("place", [])]
+    ch += [{"action": "preempt", "zone": v["zone"], "victim": v["victim"],
+            "victim_priority": v["priority"], "victim_service_type": v["service_type"],
+            "victim_remaining_s": v["remaining_s"], "rtt_ms": rtt.get(v["zone"])}
+           for v in options.get("preempt", [])]
+    ch += [{"action": "degrade", "zone": d["zone"], "degrade_level": d["level"],
+            "rtt_ms": rtt.get(d["zone"])} for d in options.get("degrade", [])]
+    if not options.get("place"):
+        ch.append({"action": "reject"})
+    return [{"id": f"o{i}", **c} for i, c in enumerate(ch, 1)]
+
+
+def resolve_choice(out, choices):
+    """LLM answer -> (the chosen entry as an action dict, error). Only the id
+    is read; ids are matched case- and whitespace-insensitively."""
+    oid = str((out or {}).get("option") or "").strip().lower()
+    c = next((c for c in choices if c["id"] == oid), None)
+    if c is None:
+        ids = ", ".join(c["id"] for c in choices)
+        return None, f"option {out.get('option')!r} is not one of the choice ids ({ids})"
+    return {k: v for k, v in c.items() if k != "id"}, ""
+
 
 RULE_SYS = """Author ONE placement rule from episodic evidence. Respond ONLY with JSON:
 {"condition": {"service_type": "<type>"}, "action": {"prefer_zone": "<zone_id>"},
@@ -178,6 +205,7 @@ class GlobalAgent:
         self._skip_place = set()
         self._no_options = False
         self._opt_nodes = {}
+        self._choices = []
         self.samples = {"reject": [], "invalid": []}     # kept in run metadata, not snapshots
 
     # --- cluster-state inputs -----------------------------------------------
@@ -433,12 +461,12 @@ class GlobalAgent:
                 info.update(cpu_free=d["cpu_free"], top_nodes=d["top_nodes"],
                             util=d["util"], healthy_frac=d["healthy_frac"])
             zones[z] = info
+        self._choices = build_choices(options, {z: v["rtt_ms"] for z, v in zones.items()})
         body = {"request": {"profile": profile, "cpu": round(demand["cpu"], 3),
                             "mem": round(demand["mem"], 3), "origin_zone": origin,
                             "degrade_floor": self.catalog.degrade_floor(profile.get("service_type"))},
-                "zones": zones, "options": options,
-                "allowed_actions": [a for a in ("place", "preempt", "degrade") if options.get(a)]
-                + ["reject"],
+                "zones": zones,
+                "choices": self._choices,
                 "memory_hints": {"failed_zones": self.mem.failed_zones(key, t)
                                  if self.use_memory else []}}
         if feedback:
@@ -507,8 +535,11 @@ class GlobalAgent:
                 self.counters["llm_unavailable"] += 1
                 return None
             rec.add_latency("decision", res.sim_ms)
-            dec, err = self._verify(res.data, options, view, rec, profile, demand, pol,
-                                    local_only)
+            chosen, err = resolve_choice(res.data, self._choices)
+            dec = None
+            if chosen is not None:
+                dec, err = self._verify(chosen, options, view, rec, profile, demand, pol,
+                                        local_only)
             if dec is not None:
                 if dec.action == "reject" and len(self.samples["reject"]) < 25:
                     self.samples["reject"].append({"reason": str(res.data.get("reason"))[:300],
@@ -521,9 +552,8 @@ class GlobalAgent:
                 return dec
             feedback = f"Your previous answer {json.dumps(res.data)[:200]} was rejected: {err}."
             self.counters["llm_invalid"] += 1
-            a = res.data.get("action")
-            cat = a if a in ("place", "preempt", "degrade", "reject") else \
-                ("parse" if "_parse_error" in res.data else "unknown_action")
+            cat = chosen["action"] if chosen is not None else \
+                ("parse" if "_parse_error" in res.data else "unknown_option")
             self.counters[f"llm_invalid_{cat}"] += 1
             if len(self.samples["invalid"]) < 25:
                 self.samples["invalid"].append({"answer": res.data, "error": err,

@@ -205,7 +205,17 @@ request, slightly inflating total latency for interrupted services.)
   new snake_case label. The label is resolved as exact, then nearest
   registered type by embedding (≥ 0.55), then `novel:<label>` with a generic
   manifest.
-- **LRU cap** of 500 entries per zone.
+- **LRU cap** of 500 entries per zone (5,000 for the shared cache of 10 zones).
+- **One cache for all zones (stage 3).** All zones belong to one operator, so
+  the zone agents share one intent cache. A zone sees its own new entries at
+  once and other zones' entries after 5 s, as if each entry travels with the
+  next capacity-digest broadcast. The quick pilot gave every zone its own
+  cache: a phrase learned in z3 was a miss in z7. Replaying its telemetry,
+  83–85% of zone cache misses would have been hits in a shared cache (miss rate
+  about 38% → 6%). `no_cache_sharing` keeps the per-zone design, so the value
+  of sharing is measured like every other mechanism. Each hit records whether
+  another zone wrote the entry (`cache_hit_shared`). Privacy is not an issue
+  in this setting: the operator's global agent already sees every profile.
 
 ## 6. Tier 3 details
 
@@ -231,7 +241,8 @@ request, slightly inflating total latency for interrupted services.)
   live full-size solve in the origin, the origin is not re-offered for
   full-size placement (`tried_local`).
 - **One structured LLM call.** The prompt carries the request profile and
-  size, per-zone digest summaries and RTTs, and an explicit options block:
+  size, per-zone digest summaries and RTTs, and a list of numbered choices
+  built from these verified options:
 
   - `place`: zones where the request fits at full size;
   - `preempt`: strictly-lower-priority running services whose eviction alone
@@ -269,11 +280,25 @@ request, slightly inflating total latency for interrupted services.)
   (`g_llm_invalid_<action>`). The quick-profile pilot that followed showed
   rejects down to 7% (8 of 111 decisions), but 68 of 111 first answers
   proposed "place" when no full-size placement existed, each costing a retry.
-  The prompt therefore also lists `allowed_actions` (the actions that have
-  options, plus reject) and requires the answer to use one. The prompt grew
-  by about 100 tokens after
-  latency calibration; the calibrated `decide` latency was measured with the
-  shorter prompt.
+  The prompt therefore also listed `allowed_actions`. In the quick run that
+  followed, 12–19 decisions per seed (of 100–157 that reached the LLM) still
+  failed verification twice and went to the rule chain; 46 of 53 failures on seed 0 were degrade answers with the
+  right level but `zone: null`, i.e. the model failed to copy a field back.
+  **Choices by id (stage 3):** every verified option is now one entry of
+  `choices` with an id (`o1`, `o2`, …): place (zone), preempt (zone, victim,
+  its priority/type/remaining time), degrade (zone, level), and reject (only
+  when no full-size placement exists). The model answers
+  `{"option": "o2", "reason": "..."}`, so there is nothing to copy wrongly.
+  Place choices come first, nearest first. CORE uses the same call, so it
+  gets the same format. The model-comparison probe (`reasoning_cases.py`)
+  shuffles the choice order per case, so always answering `o1` is not
+  rewarded. The prompt has changed since latency calibration; the calibrated
+  `decide` latency was measured with the earlier prompt.
+- **Rule chain.** The fixed place → pre-empt → degrade → reject chain runs
+  only when the LLM's answer fails verification twice or no model is
+  reachable. In the quick pilot it changed the outcome of 4–9 requests per
+  1,000 (placed with degradation after two invalid LLM answers). Each run
+  reports how often it was used (`fallback_used`).
 - **Pre-emption and migration.** The victim is evicted first. The request
   takes the freed capacity. The victim then goes through the same `replan()`
   path as failure recovery (local, then escalate), which may itself pre-empt
@@ -295,7 +320,7 @@ three need-normalised ways instead (all from the same telemetry):
 |---|---|
 | `cache_miss_first/last_quarter` | share of requests the cache can't translate |
 | `llm_per_escalation_*` (incl. busy-hours halves, slope) | LLM calls needed per escalation |
-| `tables/savings_vs_ablations*.csv`, `fig_savings_vs_ablations.png` | share of invocations the full system saves vs `no_memory`, `no_intent_cache`, `memory_ablated`, `no_digest` on the *same* workload, hour by hour, paired by seed |
+| `tables/savings_vs_ablations*.csv`, `fig_savings_vs_ablations.png` | share of invocations the full system saves vs `no_memory`, `no_intent_cache`, `no_cache_sharing` on the *same* workload, hour by hour, paired by seed |
 
 The third is the causal evidence: if memory and the cache matter, the
 savings are positive and grow as they fill. The raw per-request curve is
@@ -306,12 +331,18 @@ still reported next to them.
 Each ablation is the same `HierarchicalOrchestrator` with exactly the listed
 flags off. `tests/test_ablations.py` checks both the flags and the behaviour.
 
+The quick pilot also ran memory-only (`no_memory` with the digest kept) and
+digest-only (`no_digest`) variants. Digest-only had no measurable effect on
+any metric, and memory-only cost 1.17× calls but was not significant (Holm
+p = 0.10); memory and digest together cost 1.41× calls (significant). The
+two single-mechanism variants were therefore merged into one `no_memory`
+ablation (memory, rules and digest off).
+
 | ablation | turns off | isolates |
 |---|---|---|
-| `no_memory` | episodic + procedural memory (digest ON) | memory specifically |
-| `no_digest` | digest exchange (memory ON; memory re-checks by probing; LLM sees no capacity; blind probes) | the digest specifically |
-| `memory_ablated` | memory **and** digest | the old repo's `MemoryAblated`, now documented as the combination |
-| `no_intent_cache` | zone caches | the intent cache (SLM translates every request) |
+| `no_memory` | episodic + procedural memory **and** the capacity digest | everything the global tier remembers or is told about other zones |
+| `no_intent_cache` | the intent cache | the intent cache (SLM translates every request) |
+| `no_cache_sharing` | sharing: every zone keeps its own cache | sharing translations across zones |
 | `no_preempt_degrade` | pre-emption and degradation, in the LLM's options and the rule chain | the value of those actions |
 | `no_zone_tier` | zone agents: a central translator + central placement; every request pays the zone↔global hop | Tier 2 itself |
 | `no_cross_zone` | cross-zone targets | zone cooperation |
@@ -326,11 +357,32 @@ are borrowed.
 |---|---|---|---|
 | `greedy_oracle` | old repo | Flat least-loaded placement. **Handed the true service type** (`translation_source=oracle`), so it isolates placement architecture and is the load-calibration reference. Ignores locality; violations are measured. | none |
 | `rule_based` | old repo | Static library of training phrasings (never learns, no SLM, unknown intents rejected); local placement, then nearest digest-fit zones; no pre-emption. | static only |
-| `react` | ReAct (Yao et al., 2023) | Thought plus one tool call per step over `read_digest(zone)`, `read_running_services(zone)`, `try_place(zone,node,service_type[,evict,degrade_level])`; cap 6 steps (in the 5–7 range where ReAct found more steps stop helping); translation happens inside `try_place`. | none |
-| `lats` | LATS (Zhou et al., 2024) | MCTS over the same tools: n = 3 sampled expansions (temperature 0.7); value = 0.8 × LLM self-score + 0.2 × self-consistency; UCT; real execution of reads; `try_place` is terminal; reflection on failed branches; ≤ 20 rollouts, depth 6; stops at first success. The most token-expensive baseline by design. | none |
+| `react` | ReAct (Yao et al., 2023) | Thought plus one tool call per step over `read_digest(zone)`, `read_running_services(zone, service_type)`, `try_place(zone,node,service_type[,evict,degrade_level])`; cap 7 steps (the top of the 5–7 range where ReAct found more steps stop helping); translation happens inside `try_place`. | none |
+| `lats` | LATS (Zhou et al., 2024) | MCTS over the same tools: n = 3 sampled expansions (temperature 0.7); value = 0.8 × LLM self-score + 0.2 × self-consistency; UCT; real execution of reads; `try_place` is terminal; reflection on failed branches; when every child of a node has failed, the node is **re-expanded** with the reflections in the prompt (new samples; actions already tried there are dropped); ≤ 20 rollouts, depth 7; stops at first success or when nothing new can be tried. The most token-expensive baseline by design. | none |
 | `agentedge` | AgentEdge-style + ActSimCrit | Four LLM roles: intent → observability → planning → infra-action. A **simulate-before-execute** validator (the capacity solver and locality check stand in for a digital twin) feeds infeasible plans back to planning (≤ 2 re-plans). ≥ 4 calls per request, not expected to fall over time. | none |
 | `core` | CORE-style role affinity | Device role (no model): local solve. Edge role (SLM): translation every request, plus zone choice when a digest-fit zone exists. Cloud role (LLM): the same one-call decision when pre-emption or degradation is needed. | none |
-| `optimal_solver` | offline ILP | A **ceiling, not a competing online system.** Pooled-capacity relaxation per 2 h window: y[r, level] binary, capacity at every arrival checkpoint per zone (zone-local services) and globally; failures ignored; empty start. HiGHS MILP, with an LP-relaxation fallback that is labelled as such. A relaxation of every online policy, including migration and degradation, hence a valid upper bound (`test_baselines.py` checks this). | n/a |
+
+**ReAct/LATS fairness fixes (stage 3).** In the quick pilot ReAct rejected
+687 of 1,000 requests, and in 519 of those it never called `try_place`: it
+spent its 6 steps listing running services (up to 25 of any priority per
+call). LATS stopped as soon as all of the root's first children had failed,
+whereas the LATS paper keeps searching with reflections. Changes, the same
+text for both (`common.TOOLS_DOC`):
+- the tool description says that `try_place` is the only way to serve a
+  request, that it checks the fit itself and explains a failure, and that
+  reading running services is only worth a step when nothing has room and the
+  request is high or critical priority;
+- `read_running_services` returns only services the request may evict
+  (strictly lower priority), lowest priority and soonest finishing first, at
+  most 8;
+- ReAct's step cap and LATS's depth are both 7;
+- LATS re-expands a node whose children have all failed (see the table).
+
+All baselines keep their published mechanism; these changes remove handicaps
+that came from our tool text, not from the methods.
+
+The offline optimal bound of earlier versions was dropped: it saw the whole
+day in advance, and its gap to the online systems was not needed for any claim.
 
 ## 9. Workload, data and load calibration
 
@@ -413,7 +465,7 @@ yet, as the sweep has not been run)*.
 | 9 | acceptance used as completion | three distinct outcomes (§3) |
 | 10 | one hard-coded failure | renewal-process failure schedule |
 | 11 | three hard-cut phases called "non-stationary" | gradual drift; dynamic vs non-stationary separated (§2) |
-| 12 | `MemoryAblated` = memory+digest silently | `no_memory` / `no_digest` / `memory_ablated` |
+| 12 | `MemoryAblated` = memory+digest silently | `no_memory` documented as memory + rules + digest (§7) |
 | 13 | no test of the zone tier's value | `no_zone_tier` |
 | 14 | no external baselines | ReAct, LATS, AgentEdge-style, CORE-style (§8) |
 | 15 | model comparison never run at scale | 100-case auto-scored probe, served-model check, sweep script. The old table's identical rows for two labels are consistent with both being pointed at one server; the new harness refuses that. |
@@ -456,7 +508,9 @@ daily curve, surge and new service types replayed) and 3 seeds. Planned in two
 stages: `proposed,ablations,simple` on 3 seeds (~3 h on an RTX 4070 SUPER),
 then `agentic` (ReAct, AgentEdge, LATS) on seed 0 overnight. These cost about
 52, 77 and 194 GPU-minutes per 1,000-request seed, estimated from their call
-counts and the measured per-call latencies.
+counts and the measured per-call latencies. (The pilot measured LATS at about
+17 calls per request, roughly 4 hours per quick seed. Re-expansion lets LATS
+keep searching where it used to stop, so expect it to take longer.)
 
 With only 1,000 requests on a 50-node cluster, load can only reach the
 calibration band if a large share of services run at the same time. So the
@@ -477,3 +531,16 @@ are not comparable with the full campaign's.
 - With the disk cache on, re-running a seed turns fresh calls into
   `cached_disk` ones. Use invocation counts (fresh + cached_disk) for the
   call-reduction claim, and fresh counts only for actual compute spent.
+- Model servers are modelled without a queue, and a decision's latency does
+  not delay the placement in simulated time: each request is decided at its
+  arrival instant, and every model call is charged its own sampled latency.
+  A real single GPU answers one call at a time. This favours the systems that
+  make many calls per request (LATS about 17, AgentEdge about 6, vs about 0.6
+  for full in the quick pilot): with a queue their waits, and so their
+  latency, would be larger.
+- Service start-up (deployment) time is an assumed constant per device class
+  (`device_specs.py`), not a measurement; it is excluded from the setup
+  latency used in the main results and reported only in the appendix.
+- Degradation floors and service priorities are design assumptions set in
+  the service catalog (`scenario.py`), standing in for what a service owner
+  would declare.

@@ -1,9 +1,13 @@
 """Tier 2 - zone agents. One real ZoneAgent instance per zone (old-repo
 flaw #1: a single shared orchestrator object pretended to be every zone).
 
-Each ZoneAgent owns:
-  * its own IntentLibrary (semantic intent cache): starts empty, or with a
-    tiny seed drawn from the *training* phrasing pool only; LRU-capped;
+Each ZoneAgent has:
+  * an IntentLibrary (semantic intent cache): starts empty, or with a tiny
+    seed drawn from the *training* phrasing pool only; LRU-capped. By
+    default one library is shared by all zones of the (single) operator:
+    an entry a zone writes is usable by itself at once and by every other
+    zone after `sync_s` (it travels with the next capacity-digest
+    broadcast). The no_cache_sharing ablation gives every zone its own;
   * its own SLM handle (MultiLLM(role="slm")) with its own counters;
   * its own placement policy weights (the global agent may adjust them).
 
@@ -85,10 +89,12 @@ class IntentLibrary:
     """Semantic cache with an LRU cap. lookup() returns (profile, sim, idx)
     on a hit (sim >= threshold), else (None, best_sim, None)."""
 
-    def __init__(self, embedder, threshold, cap=500, seed_entries=()):
+    def __init__(self, embedder, threshold, cap=500, seed_entries=(), sync_s=0.0):
         self.emb, self.threshold, self.cap = embedder, float(threshold), int(cap)
+        self.sync_s = float(sync_s)
         self.texts, self.profiles, self.last_used = [], [], []
         self.trust = []          # shadow-audit agreements since the entry was (re)written
+        self.owner, self.t_added = [], []   # writing zone (None = seed) and time written
         self.M = None
         self._tick = 0
         self.evictions = 0
@@ -99,17 +105,26 @@ class IntentLibrary:
             self.profiles = [dict(p) for _, p in seed_entries][-self.cap:]
             self.last_used = list(range(len(self.texts)))
             self.trust = [0] * len(self.texts)
+            self.owner = [None] * len(self.texts)
+            self.t_added = [0.0] * len(self.texts)
             self._tick = len(self.texts)
             self.M = embedder.encode(self.texts)
 
     def __len__(self):
         return len(self.texts)
 
-    def lookup(self, text):
+    def lookup(self, text, zone=None, t=None):
+        """zone/t given: entries other zones wrote less than sync_s ago are
+        not visible yet."""
         if not self.texts:
             return None, 0.0, None
         q = self.emb.encode([text])[0]
         sims = self.M @ q
+        if zone is not None and t is not None and self.sync_s > 0:
+            hidden = np.array([o is not None and o != zone and t < ta + self.sync_s
+                               for o, ta in zip(self.owner, self.t_added)])
+            if hidden.any():
+                sims = np.where(hidden, -np.inf, sims)
         i = int(np.argmax(sims))
         if sims[i] >= self.threshold:
             self._tick += 1
@@ -117,13 +132,14 @@ class IntentLibrary:
             return dict(self.profiles[i]), float(sims[i]), i
         return None, float(sims[i]), None
 
-    def add(self, text, profile):
+    def add(self, text, profile, zone=None, t=0.0):
         v = self.emb.encode([text])[0].reshape(1, -1)
         self._tick += 1
         if len(self.texts) >= self.cap:
             j = int(np.argmin(self.last_used))
             self.texts[j], self.profiles[j], self.last_used[j] = text, dict(profile), self._tick
             self.trust[j] = 0
+            self.owner[j], self.t_added[j] = zone, float(t)
             self.M[j] = v[0]
             self.evictions += 1
             return
@@ -131,6 +147,8 @@ class IntentLibrary:
         self.profiles.append(dict(profile))
         self.last_used.append(self._tick)
         self.trust.append(0)
+        self.owner.append(zone)
+        self.t_added.append(float(t))
         self.M = v if self.M is None else np.vstack([self.M, v])
 
     def replace(self, idx, profile):
@@ -175,15 +193,16 @@ def profiles_equal(a, b):
 class ZoneAgent:
     def __init__(self, zone_id, catalog, embedder, slm, *, threshold, cache_cap=500,
                  shadow_rate=0.05, rng=None, seed_entries=(), use_cache=True,
-                 latency=None, resolve_threshold=0.55):
+                 latency=None, resolve_threshold=0.55, library=None):
         self.zone_id, self.catalog, self.emb, self.slm = zone_id, catalog, embedder, slm
-        self.lib = IntentLibrary(embedder, threshold, cache_cap, seed_entries)
+        self.lib = library if library is not None else \
+            IntentLibrary(embedder, threshold, cache_cap, seed_entries)
         self.use_cache, self.shadow_rate = use_cache, shadow_rate
         self.rng = rng or np.random.default_rng(0)
         self.latency = latency
         self.resolve_threshold = resolve_threshold
         self.policy = {}
-        self.counters = {"cache_hits": 0, "cache_misses": 0, "slm_calls": 0,
+        self.counters = {"cache_hits": 0, "cache_hits_shared": 0, "cache_misses": 0, "slm_calls": 0,
                          "shadow_checks": 0, "shadow_disagree": 0, "slm_errors": 0}
         self._sys = None
         catalog.on_register(lambda name: self._invalidate())
@@ -208,11 +227,15 @@ class ZoneAgent:
         profile dict or None (SLM unavailable and no cache hit)."""
         lat = 0.0
         if self.use_cache:
-            (prof, sim, idx), ms = measure(self.lib.lookup, text)
+            (prof, sim, idx), ms = measure(self.lib.lookup, text, self.zone_id, t)
             lat += (self.latency.embed_ms() if self.latency else 0.0) + ms
             rec.cache_similarity = round(sim, 4)
             if prof is not None:
                 self.counters["cache_hits"] += 1
+                owner = self.lib.owner[idx]
+                rec.cache_hit_shared = owner is not None and owner != self.zone_id
+                if rec.cache_hit_shared:
+                    self.counters["cache_hits_shared"] += 1
                 rec.translation_source = "cache"
                 rec.type_resolution = "cache"
                 rec.add_latency("translation", lat)
@@ -240,7 +263,7 @@ class ZoneAgent:
         rec.type_resolution = rkind
         rec.add_latency("translation", lat + res.sim_ms + ms)
         if self.use_cache:
-            self.lib.add(text, prof)
+            self.lib.add(text, prof, self.zone_id, t)
         return prof
 
     def _shadow(self, text, cached_prof, idx, req_id, rec):

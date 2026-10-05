@@ -82,6 +82,7 @@ class RequestRecord:
     service_type_correct: Optional[bool] = None
     type_resolution: Optional[str] = None          # exact | nearest | novel | static
     cache_similarity: Optional[float] = None
+    cache_hit_shared: Optional[bool] = None        # hit on an entry another zone wrote
     shadow_checked: bool = False
     shadow_agree: Optional[bool] = None
     # --- decision --------------------------------------------------------

@@ -14,8 +14,16 @@ Same tool space as ReAct, wrapped in Monte Carlo Tree Search:
   backprop      reward/value propagated to the root
   reflection    a failed try_place triggers kind="lats_reflect"; the
                 reflection is added to every later prompt of this search
-Budget: at most K rollouts (default 20) and depth 6; the search stops at
-the first successful placement. No memory, no cache across requests.
+  re-expansion  when every child of a node has ended in failure, the node
+                is expanded again - n new samples whose prompt now carries
+                the reflections - instead of the search giving up (the
+                quick pilot stopped as soon as the root's first children
+                had all failed). Candidates identical to an action already
+                tried at that node are dropped; a node whose re-expansion
+                yields nothing new is closed.
+Budget: at most K rollouts (default 20) and depth common.STEP_BUDGET (7);
+the search stops at the first successful placement or when the root is
+closed. No memory, no cache across requests.
 This is expected - and logged - to be the most token-expensive baseline.
 """
 import math
@@ -23,9 +31,10 @@ import math
 from llm_client import LLMUnavailable
 from sim_engine import Decision
 
-from .common import TOOLS_DOC, ToolEnv, catalog_sizes, dumps, finish_decision, request_block
+from .common import (STEP_BUDGET, TOOLS_DOC, ToolEnv, catalog_sizes, dumps, finish_decision,
+                     request_block)
 
-N_SAMPLES, MAX_ROLLOUTS, MAX_DEPTH = 3, 20, 6
+N_SAMPLES, MAX_ROLLOUTS, MAX_DEPTH = 3, 20, STEP_BUDGET
 LAMBDA, C_UCT = 0.8, 1.0
 
 EXPAND_SYS = """You are an orchestration agent placing a service request on an edge cluster,
@@ -46,13 +55,19 @@ state what went wrong and what to do differently. Respond with ONLY a JSON objec
 
 class _Node:
     __slots__ = ("history", "action", "parent", "children", "visits", "value",
-                 "terminal", "reward", "expanded", "simulated", "prior")
+                 "terminal", "reward", "expanded", "simulated", "prior", "n_expansions")
 
     def __init__(self, history, action=None, parent=None):
         self.history, self.action, self.parent = history, action, parent
         self.children, self.visits, self.value = [], 0, 0.0
         self.terminal, self.reward, self.expanded = False, 0.0, False
         self.simulated, self.prior = False, 0.0
+        self.n_expansions = 0
+
+    def dead(self):
+        """Every child tried and ended without a placement."""
+        return bool(self.children) and all(c.simulated and c.terminal and c.reward <= 0.0
+                                           for c in self.children)
 
     def uct(self, n_parent):
         if self.visits == 0:
@@ -74,7 +89,7 @@ class LATSBaseline:
         self.llm = make_llm("llm", "lats")
         self.n, self.k = n_samples, max_rollouts
         self.view = None
-        self.counters = {"rollouts": 0, "expansions": 0, "reflections": 0}
+        self.counters = {"rollouts": 0, "expansions": 0, "re_expansions": 0, "reflections": 0}
 
     def attach(self, view, latency):
         self.view = view
@@ -87,8 +102,12 @@ class LATSBaseline:
         return res
 
     def _expand(self, node, base, reflections, rid, rec):
+        """Adds the distinct new candidates among n samples; returns
+        (first response source, number of children added)."""
         samples, src = [], None
-        for i in range(self.n):
+        first = node.n_expansions * self.n          # fresh sample indices on re-expansion
+        node.n_expansions += 1
+        for i in range(first, first + self.n):
             try:
                 res = self._ask(EXPAND_SYS, {**base, "history": node.history,
                                              "reflections": reflections},
@@ -99,9 +118,13 @@ class LATSBaseline:
             samples.append(res.data)
         node.expanded = True
         self.counters["expansions"] += 1
+        if node.n_expansions > 1:
+            self.counters["re_expansions"] += 1
+        tried = {_akey(c.action) for c in node.children}
         groups = {}
         for a in samples:
-            groups.setdefault(_akey(a), []).append(a)
+            if _akey(a) not in tried:
+                groups.setdefault(_akey(a), []).append(a)
         for acts in groups.values():
             a = acts[0]
             try:
@@ -116,7 +139,7 @@ class LATSBaseline:
             child.prior = LAMBDA * max(0.0, min(score, 1.0)) + \
                 (1 - LAMBDA) * len(acts) / len(samples)
             node.children.append(child)
-        return src
+        return src, len(groups)
 
     def _search(self, rid, origin, text, rec, env):
         sizes = catalog_sizes(self.catalog, self.resources)
@@ -131,26 +154,28 @@ class LATSBaseline:
                 if not node.simulated:                        # new leaf: simulate it
                     reward = self._simulate(node, env, reflections, base, rid, rec)
                     break
-                if node.terminal or len(node.history) >= MAX_DEPTH:
+                if len(node.history) >= MAX_DEPTH and not node.terminal:
+                    node.terminal, node.reward = True, 0.0    # step budget used up: a failure
+                if node.terminal:
                     reward = node.reward
                     break
-                if not node.expanded:                         # expand, then simulate best child
-                    first_src = self._expand(node, base, reflections, rid, rec) or first_src
-                    if not node.children:
-                        node.terminal, reward = True, 0.0
+                if not node.expanded or node.dead():          # (re-)expand, then simulate best new child
+                    src, added = self._expand(node, base, reflections, rid, rec)
+                    first_src = first_src or src
+                    if not added:                             # nothing new to try here: close it
+                        node.terminal, node.reward, reward = True, 0.0, 0.0
                         break
-                    node = max(node.children, key=lambda c: c.prior)
                     continue
                 pending = [c for c in node.children if not c.simulated]
+                live = [c for c in node.children if not (c.terminal and c.reward <= 0.0)]
                 node = max(pending, key=lambda c: c.prior) if pending else \
-                    max(node.children, key=lambda c: c.uct(node.visits))
+                    max(live, key=lambda c: c.uct(node.visits))
             if env.decision is not None:
                 env.decision.decision_source = "llm_fresh" if first_src == "fresh" \
                     else "llm_cached_disk"
                 return env.decision, first_src
             self._backprop(node, reward)
-            if root.expanded and all(c.terminal for c in root.children) and \
-                    all(c.simulated for c in root.children):
+            if root.terminal:
                 break
         return None, first_src
 
