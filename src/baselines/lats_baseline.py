@@ -32,7 +32,7 @@ from llm_client import LLMUnavailable
 from sim_engine import Decision
 
 from .common import (STEP_BUDGET, TOOLS_DOC, ToolEnv, catalog_sizes, dumps, finish_decision,
-                     request_block)
+                     repeat_note, request_block, trajectory_prompt)
 
 N_SAMPLES, MAX_ROLLOUTS, MAX_DEPTH = 3, 20, STEP_BUDGET
 LAMBDA, C_UCT = 0.8, 1.0
@@ -95,8 +95,8 @@ class LATSBaseline:
         self.view = view
 
     def _ask(self, sys, body, kind, rid, rec, temperature=0.0, sample_idx=0):
-        res = self.llm.ask(sys, dumps(body), kind=kind, req_id=rid,
-                           temperature=temperature, sample_idx=sample_idx)
+        res = self.llm.ask(sys, body if isinstance(body, str) else dumps(body), kind=kind,
+                           req_id=rid, temperature=temperature, sample_idx=sample_idx)
         rec.add_latency("decision", res.sim_ms)
         rec.reached_llm_stage = True
         return res
@@ -109,8 +109,8 @@ class LATSBaseline:
         node.n_expansions += 1
         for i in range(first, first + self.n):
             try:
-                res = self._ask(EXPAND_SYS, {**base, "history": node.history,
-                                             "reflections": reflections},
+                res = self._ask(EXPAND_SYS, trajectory_prompt(base, node.history, MAX_DEPTH,
+                                                              reflections=reflections),
                                 "lats_expand", rid, rec, temperature=0.7, sample_idx=i)
             except LLMUnavailable:
                 continue
@@ -128,9 +128,9 @@ class LATSBaseline:
         for acts in groups.values():
             a = acts[0]
             try:
-                v = self._ask(VALUE_SYS, {**base, "history": node.history,
-                                          "candidate": {"tool": a.get("tool"),
-                                                        "args": a.get("args", {})}},
+                v = self._ask(VALUE_SYS, trajectory_prompt(
+                    base, node.history, MAX_DEPTH, now="Score the candidate next step.",
+                    candidate={"tool": a.get("tool"), "args": a.get("args", {})}),
                               "lats_value", rid, rec).data
                 score = float(v.get("score", 0)) / 10.0
             except (LLMUnavailable, TypeError, ValueError, AttributeError):
@@ -186,7 +186,7 @@ class LATSBaseline:
         if tool == "finish" or tool is None:
             child.terminal, child.reward = True, 0.0
             return 0.0
-        obs = env.run_tool(tool, args)
+        obs = repeat_note(child.history, tool, args) or env.run_tool(tool, args)
         child.history = child.history + [{"thought": str(a.get("thought", ""))[:300],
                                           "action": {"tool": tool, "args": args},
                                           "observation": obs}]
@@ -197,7 +197,9 @@ class LATSBaseline:
                 return 1.0
             child.reward = 0.0
             try:
-                r = self._ask(REFLECT_SYS, {**base, "failed_trajectory": child.history},
+                r = self._ask(REFLECT_SYS, trajectory_prompt(
+                    base, child.history, MAX_DEPTH,
+                    now="This trajectory's last try_place failed. Reflect on it."),
                               "lats_reflect", rid, rec).data
                 reflections.append(str(r.get("reflection", ""))[:300])
                 self.counters["reflections"] += 1

@@ -378,8 +378,21 @@ text for both (`common.TOOLS_DOC`):
 - ReAct's step cap and LATS's depth are both 7;
 - LATS re-expands a node whose children have all failed (see the table).
 
+- **Prompt layout (after the stage-3 quick run).** ReAct still reached only
+  25% acceptance: in 588 of 981 requests it called `read_digest` on the same
+  zone 7 times in a row and never acted (5,653 of its 6,119 calls were
+  `read_digest`, 4,806 identical to the previous call), while 251 of its
+  301 `try_place` calls succeeded. The cause was ours: each step's message was
+  JSON with sorted keys, which put the trajectory (`history`) *before* the
+  task (`request`), with no step counter, so the model re-did step 1 every
+  turn. ReAct and LATS now send the task first, then the numbered steps,
+  then "choose step k of 7" (`common.trajectory_prompt`). The tool text says
+  the cluster does not change while a request is decided, and a call
+  identical to one already in the trajectory is answered with a note
+  pointing to that step instead of being re-run (`common.repeat_note`).
+
 All baselines keep their published mechanism; these changes remove handicaps
-that came from our tool text, not from the methods.
+that came from our prompts and tool text, not from the methods.
 
 The offline optimal bound of earlier versions was dropped: it saw the whole
 day in advance, and its gap to the online systems was not needed for any claim.

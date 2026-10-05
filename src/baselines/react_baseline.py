@@ -15,8 +15,8 @@ step is one LLM call, logged with kind="react_step".
 from llm_client import LLMUnavailable
 from sim_engine import Decision
 
-from .common import (STEP_BUDGET, TOOLS_DOC, ToolEnv, catalog_sizes, dumps, finish_decision,
-                     request_block)
+from .common import (STEP_BUDGET, TOOLS_DOC, ToolEnv, catalog_sizes, finish_decision,
+                     repeat_note, request_block, trajectory_prompt)
 
 MAX_STEPS = STEP_BUDGET
 
@@ -47,7 +47,7 @@ class ReActBaseline:
                 "catalog_sizes": sizes}
         for _ in range(self.max_steps):
             try:
-                res = self.llm.ask(REACT_SYS, dumps({**base, "history": history}),
+                res = self.llm.ask(REACT_SYS, trajectory_prompt(base, history, self.max_steps),
                                    kind="react_step", req_id=rid)
             except LLMUnavailable:
                 break
@@ -59,7 +59,7 @@ class ReActBaseline:
             tool, args = a.get("tool"), a.get("args", {})
             if tool == "finish":
                 break
-            obs = env.run_tool(tool, args)
+            obs = repeat_note(history, tool, args) or env.run_tool(tool, args)
             if isinstance(obs, dict) and obs.get("error"):
                 self.counters["tool_errors"] += 1
             history.append({"thought": str(a.get("thought", ""))[:300],

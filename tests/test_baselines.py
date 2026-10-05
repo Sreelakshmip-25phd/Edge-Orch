@@ -74,3 +74,36 @@ def test_lats_re_expands_with_reflections_after_all_children_fail(monkeypatch):
     assert lats.counters["re_expansions"] == 1
     assert lats.counters["reflections"] == 3
     assert len(llm.expand_prompts[-1]["reflections"]) == 3     # re-expansion saw the reflections
+
+
+def test_react_prompt_puts_task_first_and_answers_repeats_with_a_note(monkeypatch):
+    import baselines.react_baseline as R
+    from llm_client import LLMResult
+    monkeypatch.setattr(R, "request_block", lambda *a: {"intent": "watch the crowd"})
+    monkeypatch.setattr(R, "catalog_sizes", lambda *a: {})
+
+    class FakeLLM:
+        users = []
+
+        def ask(self, system, user, *, kind, req_id=None, **_):
+            self.users.append(user)
+            return LLMResult(data={"thought": "look", "tool": "read_digest", "args": {"zone": "z0"}},
+                             source="fresh", tokens_in=1, tokens_out=1, wall_ms=1.0, sim_ms=1.0)
+
+    class FakeEnv:
+        decision, calls = None, 0
+
+        def run_tool(self, tool, args):
+            self.calls += 1
+            return {"zone": "z0", "nodes": []}
+
+    llm, env = FakeLLM(), FakeEnv()
+    react = R.ReActBaseline(catalog=None, make_llm=lambda role, agent: llm, resources=None)
+    react.view = None
+    dec, _ = react._loop("r1", "z0", "text", ScratchRecord("r1"), env)
+    assert dec is None and len(llm.users) == R.MAX_STEPS
+    assert env.calls == 1                                  # repeats never reach the cluster
+    last = json.loads(llm.users[-1])
+    assert list(last)[0] == "request" and list(last)[-1] == "now"
+    assert last["history"][1]["observation"]["repeated_call"]
+    assert last["now"].startswith(f"Choose step {R.MAX_STEPS} of {R.MAX_STEPS}")

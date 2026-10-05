@@ -170,6 +170,9 @@ request that is not placed by then is rejected):
   may evict (strictly lower priority), lowest priority and soonest finishing first.
   Only worth a step when no node has room and the request is high or critical priority.
 - finish {}: give up (the request is rejected).
+The cluster does not change while you decide one request: repeating a call you already made
+returns nothing new, so after reading a zone either try_place on a node with enough free CPU and
+memory for the request, read a different zone, or finish.
 service_type must be a catalog name (or a short new snake_case name if nothing fits).
 data_locality "zone_local" services must stay in the origin zone.
 """ + OBJECTIVE
@@ -186,5 +189,34 @@ def dumps(o):
     return json.dumps(o, sort_keys=True, default=str)
 
 
+def trajectory_prompt(base, history, max_steps, now=None, **extra):
+    """User message of one ReAct / LATS step: the task first, then the steps
+    taken so far, numbered, then what to do now. (The quick runs serialised
+    this with sorted keys, which put "history" BEFORE "request": Qwen2.5-7B
+    then re-did step 1 every turn - 588 of 981 ReAct requests read the same
+    zone 7 times and never acted.) Key order is kept as written here."""
+    body = {"request": base["request"], "catalog_sizes": base["catalog_sizes"]}
+    body["history"] = [{"step": i + 1, **h} for i, h in enumerate(history)]
+    body.update(extra)
+    body["now"] = now or (f"Choose step {len(history) + 1} of {max_steps}. Do not repeat a "
+                          "call whose observation is already in history.")
+    return json.dumps(body, default=str)
+
+
+def repeat_note(history, tool, args):
+    """Observation for a call identical to one already in this trajectory:
+    the cluster is frozen while a request is decided, so the result would be
+    the same. Returned instead of re-running the call (no round trip)."""
+    key = dumps({"tool": tool, "args": args if isinstance(args, dict) else {}})
+    for i, h in enumerate(history):
+        a = h.get("action", {})
+        if dumps({"tool": a.get("tool"), "args": a.get("args") or {}}) == key:
+            return {"repeated_call": True,
+                    "note": f"Identical to step {i + 1}; the result is unchanged (see step "
+                            f"{i + 1}). Choose a different action."}
+    return None
+
+
 __all__ = ["ToolEnv", "TOOLS_DOC", "profile_for", "catalog_sizes", "label_path",
-           "finish_decision", "request_block", "dumps", "EPS", "SERVICE_TYPES"]
+           "finish_decision", "request_block", "dumps", "trajectory_prompt", "repeat_note",
+           "EPS", "SERVICE_TYPES"]

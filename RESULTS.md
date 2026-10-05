@@ -51,11 +51,17 @@ removing memory + digest 2.1×, removing cache sharing 2.2×, removing the
 zone tier 1.19× (in the pilot that ablation was cheaper); acceptance stays
 within ±0.5 pp in all four. CORE ties on acceptance (92.6%) at 5.8× the calls.
 
+ReAct on quick seed 0 with that code reached only 25.1% acceptance at 6.4
+calls/request: a prompt-layout bug of ours made it re-read the same zone
+until its steps ran out (ARCHITECTURE.md §8). That run and the LATS run that
+shared the layout are discarded; AgentEdge is unaffected.
+
 ## 3. Still to run
 
 See ARCHITECTURE.md "The `medium` profile and the two experiments".
 
-1. Experiment 2: react, agentedge, lats on quick seeds 0, 1, 2.
+1. Experiment 2: react and lats (fixed prompts) on quick seeds 0, 1, 2;
+   agentedge on seeds 1, 2 (seed 0 is valid).
 2. Re-measure model latency (`scripts/calibrate_latency.py`): the decision
    prompt changed after the last calibration.
 3. Experiment 1: `medium` profile, 10 systems × 5 seeds.
