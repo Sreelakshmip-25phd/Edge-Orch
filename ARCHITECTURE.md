@@ -541,14 +541,19 @@ therefore split into two experiments, each paired on identical workloads:
 
 | experiment | profile | systems | seeds | estimated GPU time |
 |---|---|---|---|---|
-| 1, main | `medium`: 6,000 requests over the real 24 h day, 1,200 devices | full, 6 ablations, greedy_oracle, rule_based, core | 5 | about 20 h |
-| 2, agentic baselines | `quick`: 1,000 requests, compressed 3 h day | full vs react, agentedge, lats | 3 | about 6–7 h per seed |
+| 1, main | `medium`: 6,000 requests over the real 24 h day, 1,200 devices | full, 6 ablations, greedy_oracle, rule_based, core | 5 | 7.5 h measured (8 min per full run) |
+| 2, agentic baselines | `quick`: 1,000 requests, compressed 3 h day | full vs react, agentedge, lats | 3 (LATS 1) | ReAct and AgentEdge about 1 h per seed, LATS 9.2 h per seed |
 
 `medium` keeps the full day's drift: on seed 0, 1,135 / 2,560 / 2,305
 requests in the three thirds of the day, 238 / 697 / 875 distinct phrasings,
 and the new types first seen at 6.4 h (federated_ml) to 18.1 h (ev_charging).
-Its load factor is calibrated like the others: K = 128 gives greedy
-acceptance 0.803 (target 0.80–0.90). Numbers are compared only within an
+Its load factor is calibrated like the others, on the machine that runs
+the experiment: on the GPU machine K = 128 gave greedy acceptance 0.791, just
+below the band, and bisection settled on K = 96 (0.857; a typical service
+runs about 16 min). The development machine got 0.803 at K = 128: workloads
+are generated on each machine, and library/OS floating-point differences
+shift a few placements. Every run of one experiment uses that machine's
+workloads and K. Numbers are compared only within an
 experiment, because the load factors differ.
 
 With 5 seeds the paired t-test is the significance test: a two-sided

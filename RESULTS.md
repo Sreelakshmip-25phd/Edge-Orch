@@ -56,18 +56,60 @@ calls/request: a prompt-layout bug of ours made it re-read the same zone
 until its steps ran out (ARCHITECTURE.md §8). That run and the LATS run that
 shared the layout are discarded; AgentEdge is unaffected.
 
-## 3. Still to run
+## 3. Experiment 1: `medium` (6,000 requests over a 24 h day, 5 seeds)
 
-See ARCHITECTURE.md "The `medium` profile and the two experiments".
+Run on the GPU machine (K = 96, greedy acceptance 0.857), latency
+re-measured after the choice-by-id prompt. 50 runs, about 7.5 h.
+Mean over 5 seeds; * = paired t-test vs full, Holm-corrected within the table.
 
-1. Experiment 2: react and lats (fixed prompts) on quick seeds 0, 1, 2;
-   agentedge on seeds 1, 2 (seed 0 is valid).
-2. Re-measure model latency (`scripts/calibrate_latency.py`): the decision
-   prompt changed after the last calibration.
-3. Experiment 1: `medium` profile, 10 systems × 5 seeds.
-4. `python scripts/paper_results.py --profile medium` and `--profile quick`.
+full: 91.2% accepted, 78.4% escalation success, 92.8% of new-type requests
+accepted, 0.6% locality violations, 88.9% service type correct, 0.14 model
+calls/request, 136 tokens/request, 83 ms setup latency; intent-cache misses
+2.2% in the first quarter of the day, 1.3% in the last.
 
-## 4. Smoke run (mock LLM; NOT results)
+| ablation | accepted | escalation success | model calls | setup latency |
+|---|---|---|---|---|
+| no_intent_cache | −0.1 pp | −0.4 pp | 7.90× * | 4.40× * |
+| no_memory (memory, rules, digest) | −0.8 pp * | −2.3 pp * | 3.07× * | 2.67× * |
+| no_cache_sharing | −0.6 pp | −1.1 pp | 1.87× * | 1.39× * |
+| no_zone_tier | −0.4 pp | n/a (all requests escalate) | 1.17× * | 1.62× * |
+| no_cross_zone | −4.7 pp * | −26.9 pp * | 0.65× * | 0.66× * |
+| no_preempt_degrade | −10.9 pp * | −42.4 pp * | 0.29× * | 0.28× * |
+
+| baseline | accepted | new types | locality violations | model calls / req | tokens / req | setup latency |
+|---|---|---|---|---|---|---|
+| **full** | **91.2%** | 92.8% | 0.6% | **0.14** | **136** | **83 ms** |
+| core | 90.9% | 96.2% | 0.5% | 1.43 * (10.2×) | 868 * | 457 ms * |
+| greedy_oracle | 85.4% * | 85.7% * | 37.1% * | 0 | 0 | n/a (given type) |
+| rule_based | 73.1% * | 13.9% * | 0.0% * | 0 | 0 | 16 ms * |
+
+Four mechanisms cut model calls without costing acceptance (cache, memory,
+sharing, zone tier); two protect quality (cross-zone placement,
+pre-emption/degradation). CORE matches full's quality at 10× the calls. On
+the new service types CORE is ahead (96.2% vs 92.8%, not significant; the
+same direction in quick): it translates every request afresh, while full's
+cache can match a new type to a similar known one.
+
+## 4. Experiment 2: agentic baselines on `quick` (1,000 requests, 3 seeds; LATS 1 seed)
+
+| system | accepted | new types | locality violations | service type correct | model calls / req | tokens / req | setup latency |
+|---|---|---|---|---|---|---|---|
+| **full** | **92.0%** | **96.9%** | 1.5% | 88.4% | **0.24** | **193** | **126 ms** |
+| lats (seed 0) | 85.0% | 69.5% | 10.4% | 76.2% | 24.27 | 46,541 | 11,421 ms |
+| agentedge | 75.8% | 66.4% * | 0.0% * | 88.5% | 6.11 * | 4,198 * | 2,787 ms * |
+| react | 73.2% * | 64.3% | 8.7% * | 61.8% * | 4.11 * | 7,783 * | 2,584 ms * |
+
+LATS ran on one seed only: one quick seed takes 9.2 h on the RTX 4070 SUPER,
+against about 2.5 min for full. Seeds 1–2 can be added later; the LLM answers
+of the interrupted seed 1 are cached.
+
+## 5. Still to run
+
+1. Model comparison (`scripts/run_model_sweep.py`): the 6 other local models
+   with latency calibration, then llama32_3b and medium with `--skip-latency`.
+2. `python scripts/paper_results.py --profile medium` and `--profile quick`.
+
+## 6. Smoke run (mock LLM; NOT results)
 
 `python main.py --profile smoke` runs every system end to end on synthetic
 data with the mock LLM and placeholder latencies, in a few minutes. It shows

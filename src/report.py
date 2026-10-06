@@ -108,6 +108,12 @@ ABLATION_COLS = [  # (label, metric, kind) kind: pp = difference, x = ratio
 ]
 
 
+# Without zone agents every request goes to the global tier, so every request
+# counts as escalated: escalation success then has a different denominator
+# (all requests, not only the hard ones) and is not comparable with full's.
+NOT_COMPARABLE = {("no_zone_tier", "escalation_success")}
+
+
 def table_ablations(runs, seeds, tests, ablations, isolates):
     full = {key: _ci(runs, "full", seeds, key)[0] for _, key, _ in ABLATION_COLS}
     ref = {"system": "**full (proposed)**", "removes": "-"}
@@ -122,7 +128,9 @@ def table_ablations(runs, seeds, tests, ablations, isolates):
         r = {"system": s, "removes": isolates.get(s, "")}
         for lab, key, kind in ABLATION_COLS:
             m = _ci(runs, s, seeds, key)[0]
-            if m is None or full[key] is None:
+            if (s, key) in NOT_COMPARABLE:
+                r[lab] = "n/a (see note)"
+            elif m is None or full[key] is None:
                 r[lab] = "n/a"
             elif kind == "pp":
                 r[lab] = f"{100 * (m - full[key]):+.1f} pp" + _star(tests, s, key)
@@ -290,7 +298,9 @@ def write_main(out, runs, present, seeds, tests, ablations, baselines, isolates,
             banner + "# Table 2 - what each mechanism contributes\n\n" + note +
             "First row: the full system's absolute values. Other rows: quality as the "
             "difference from full in percentage points (negative = worse); cost as a ratio to "
-            "full (above 1.00x = the ablation needs more).\n\n" + _md(rows, cols))
+            "full (above 1.00x = the ablation needs more). no_zone_tier has no escalation "
+            "success to compare: without zone agents every request counts as escalated, so the "
+            "rate is over all requests rather than the hard ones.\n\n" + _md(rows, cols))
     call_refs = [s for s in ("full", "no_intent_cache", "no_memory", "no_cache_sharing")
                  if s in present]
     fig_calls_over_time(plt, runs, seeds, call_refs, os.path.join(out, "fig1_calls_over_time.png"),
