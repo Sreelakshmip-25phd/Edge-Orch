@@ -525,8 +525,13 @@ def savings_vs_ablations(runs, systems, seeds, tdir):
                                                  max(sum(_inv_bins(runs[(ref, k)]).sum()
                                                          for k in seeds if ("full", k) in runs
                                                          and (ref, k) in runs), 1e-9))})
-    pd.DataFrame(rows).to_csv(os.path.join(tdir, "savings_vs_ablations_by_hour.csv"), index=False)
-    pd.DataFrame(summary).to_csv(os.path.join(tdir, "savings_vs_ablations.csv"), index=False)
+    for name, data in (("savings_vs_ablations_by_hour.csv", rows),
+                       ("savings_vs_ablations.csv", summary)):
+        path = os.path.join(tdir, name)
+        if data:
+            pd.DataFrame(data).to_csv(path, index=False)
+        elif os.path.exists(path):      # no ablation in this report (e.g. a model-sweep
+            os.remove(path)             # run of full alone): no stale or empty file
 
 
 def _md_table(df):
@@ -606,7 +611,7 @@ def figures(profile, runs, systems, seeds):
 
     # 2b. savings vs ablations per hour (causal view of the claim)
     sp = os.path.join(results_dir(profile), "tables", "savings_vs_ablations_by_hour.csv")
-    if os.path.exists(sp):
+    if os.path.exists(sp) and os.path.getsize(sp) > 1:
         import pandas as pd
         d = pd.read_csv(sp)
         if len(d):
