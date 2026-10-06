@@ -15,6 +15,13 @@ upper-bound quality reference, not a deployment candidate.
 
 If GPU memory forces dropping a tier, drop it here and record the cut in
 ARCHITECTURE.md ("Model comparison").
+
+The server is started directly (start_server.build_cmd), not through the
+start_server.py launcher: on Windows, terminating the launcher left the real
+server running, so every later tier was silently measured on the first tier's
+model. The sweep now refuses a port that is already serving, checks that the
+served model file is the tier's own before measuring anything, and waits for
+the port to close after each tier.
 """
 import argparse
 import os
@@ -28,6 +35,7 @@ import config  # noqa: E402
 
 sys.path.insert(0, os.path.join(BASE, "local_llm"))
 from models import MODELS  # noqa: E402
+from start_server import build_cmd  # noqa: E402
 
 
 def wait_ready(url, timeout=900):
@@ -41,6 +49,38 @@ def wait_ready(url, timeout=900):
             pass
         time.sleep(5)
     return False
+
+
+def answering(url):
+    import requests
+    try:
+        return requests.get(url + "/v1/models", timeout=3).ok
+    except Exception:
+        return False
+
+
+def served_ids(url):
+    import requests
+    try:
+        return [str(m.get("id")) for m in requests.get(url + "/v1/models", timeout=10)
+                .json().get("data", [])]
+    except Exception:
+        return []
+
+
+def stop(srv, url):
+    srv.terminate()
+    try:
+        srv.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        srv.kill()
+        srv.wait(timeout=30)
+    for _ in range(60):
+        if not answering(url):
+            return
+        time.sleep(1)
+    raise SystemExit(f"{url} still answers after stopping the server - stop the stray "
+                     "llama_cpp.server process before continuing")
 
 
 def main():
@@ -58,13 +98,21 @@ def main():
     url = f"http://127.0.0.1:{a.port}"
     for tier in [t for t in a.tiers.split(",") if t]:
         print(f"\n########## {tier} ##########", flush=True)
-        srv = subprocess.Popen([py, os.path.join(BASE, "local_llm", "start_server.py"), tier,
-                                "--port", str(a.port)], stdout=open(f"server_{tier}.log", "w"),
-                               stderr=subprocess.STDOUT)
+        if answering(url):
+            raise SystemExit(f"{url} is already serving {served_ids(url)} - stop that server "
+                             "first (a stray server would be measured in place of this tier)")
+        srv = subprocess.Popen(build_cmd(tier, "127.0.0.1", a.port, 4096),
+                               stdout=open(f"server_{tier}.log", "w"), stderr=subprocess.STDOUT)
         try:
             if not wait_ready(url):
                 print(f"{tier}: server never became ready - see server_{tier}.log; skipping")
                 continue
+            want = os.path.basename(MODELS[tier]["filename"])
+            ids = served_ids(url)
+            if not any(os.path.basename(i.replace("\\", "/")) == want for i in ids):
+                print(f"{tier}: the server reports {ids}, not {want} - skipping this tier")
+                continue
+            print(f"{tier}: serving {want}", flush=True)
             subprocess.run([py, os.path.join(BASE, "local_llm", "model_compare.py"),
                             "--target", f"{tier}@{url}"], check=False)
             if not a.skip_latency:
@@ -84,11 +132,7 @@ def main():
                     cmd += ["--seeds", a.seeds]
                 subprocess.run(cmd, env=env, check=False)
         finally:
-            srv.terminate()
-            try:
-                srv.wait(timeout=60)
-            except subprocess.TimeoutExpired:
-                srv.kill()
+            stop(srv, url)
     ref = config.HOSTED_REFERENCE.get(a.hosted_ref)
     if ref and os.environ.get(ref["provider_env"]):
         subprocess.run([py, os.path.join(BASE, "local_llm", "model_compare.py"),

@@ -459,9 +459,19 @@ Phi, Mistral, Gemma families). One hosted reference (Llama-3.3-70B) is added,
 labelled "hosted reference, not a deployment candidate".
 `scripts/run_model_sweep.py` runs, per tier: the model-comparison probe
 (translation on held-out phrasings; 100 auto-scored decision cases), latency
-calibration, and one full end-to-end evaluation with that model in both
-roles. If GPU memory forces a tier to be dropped, record it here: *(no cuts
-yet, as the sweep has not been run)*.
+calibration, and one end-to-end evaluation with that model in both roles
+(`--profile quick --systems full`: the full system on the quick workloads).
+If GPU memory forces a tier to be dropped, record it here: *(no cuts yet)*.
+
+The first sweep was invalid: every row's `served_model` was
+Qwen2.5-1.5B. On Windows, terminating the `start_server.py` launcher left
+the real server running on the sweep's port, so each later tier was measured
+on the first tier's model. Its tagged evaluation runs also shared the main
+runs' LLM cache files (same profile directory and model label). The sweep
+now starts the server process itself, refuses a port that already answers,
+checks that the served file is the tier's own, and waits for the port to
+close after each tier; tagged runs use their own cache tree
+(`cache/<profile>__<tag>/`).
 
 ## 12. Old-repo flaws and where they are fixed
 

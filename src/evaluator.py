@@ -26,7 +26,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (DEVICE_CALIBRATION, DIGEST_S, LATENCY_CALIBRATION, LLM_CACHE_DIR,  # noqa: E402
-                    LLM_MODEL_LABEL, POLICY_TICK_S, PROFILES, SLM_MODEL_LABEL, BASE,
+                    LLM_MODEL_LABEL, POLICY_TICK_S, PROFILES, RESULTS_TAG, SLM_MODEL_LABEL, BASE,
                     ensure_dirs, results_dir)
 import ablations  # noqa: E402
 import metrics as M  # noqa: E402
@@ -206,8 +206,11 @@ def run_one(ctx, name, seed, force=False):
     wl = SB.load_workload(ctx.profile, seed)
     ctx.warm(wl)
     # one disk cache per (system, seed): parallel shards never share a file, and a
-    # seed's fresh-call count never depends on which seeds happened to run first
-    cache_root = os.path.join(LLM_CACHE_DIR, ctx.profile, name, f"seed{seed}")
+    # seed's fresh-call count never depends on which seeds happened to run first.
+    # A tagged run (model sweep) gets its own tree, like its results: otherwise a
+    # sweep of label "medium" would read and append to the main run's cache files
+    prof_dir = f"{ctx.profile}__{RESULTS_TAG}" if RESULTS_TAG else ctx.profile
+    cache_root = os.path.join(LLM_CACHE_DIR, prof_dir, name, f"seed{seed}")
     tel = simulate(ctx, name, wl, seed, cache_root)
     tp = os.path.join(d, f"seed{seed}.telemetry.jsonl.gz")
     tel.dump(tp + ".tmp")
