@@ -355,7 +355,7 @@ def aggregate(profile, systems, seeds):
     pd.DataFrame(long_rows).to_csv(os.path.join(tdir, "all_metrics_long.csv"), index=False)
     df = pd.DataFrame(summary).set_index("system")
     df.to_csv(os.path.join(tdir, "summary.csv"))
-    with open(os.path.join(tdir, "summary.md"), "w") as f:
+    with open(os.path.join(tdir, "summary.md"), "w", encoding="utf-8") as f:
         f.write(_md_table(df.reset_index()))
     tests = paired_tests(runs, present, seeds, KEY_METRICS)
     pd.DataFrame(tests).to_csv(os.path.join(tdir, "paired_tests_vs_full.csv"), index=False)
@@ -421,7 +421,7 @@ def _write_group_comparisons(runs, systems, seeds, tests, tdir):
             continue
         df = pd.DataFrame(_group_table(runs, ["full"] + sel, seeds, tests))
         df.to_csv(os.path.join(tdir, f"compare_{group}.csv"), index=False)
-        with open(os.path.join(tdir, f"compare_{group}.md"), "w") as f:
+        with open(os.path.join(tdir, f"compare_{group}.md"), "w", encoding="utf-8") as f:
             f.write(f"# full vs {group}\n\n" + head + _md_table(df))
 
 

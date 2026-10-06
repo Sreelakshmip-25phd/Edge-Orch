@@ -42,7 +42,7 @@ def main():
                             "translate_ms_mean", "translate_ms_p95", "decide_ms_mean",
                             "decide_ms_p95", "tokens_in_per_call", "tokens_out_per_call")
                 if c in df]
-        open(os.path.join(out, "table_models.md"), "w").write(
+        open(os.path.join(out, "table_models.md"), "w", encoding="utf-8").write(
             "# Table 3 - local models compared\n\n" + E._md_table(df.sort_values("params_b")[cols]))
     print(f"wrote {out}")
 

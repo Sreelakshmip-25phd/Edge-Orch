@@ -178,7 +178,9 @@ def fig_calls_over_time(plt, runs, seeds, systems, path, tag):
     ax.set_ylabel("model calls per request (SLM + LLM)", color=INK2, fontsize=9)
     ax.set_ylim(bottom=0)
     ax.set_title("Model calls per request over the day" + tag, fontsize=10, color=INK, loc="left")
-    ax.legend(fontsize=8, frameon=False, loc="upper left")
+    if ax.get_legend_handles_labels()[0]:
+        ax.legend(fontsize=8, frameon=False, ncol=4, loc="upper center",
+                  bbox_to_anchor=(0.5, -0.16))
     fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
@@ -287,14 +289,14 @@ def write_main(out, runs, present, seeds, tests, ablations, baselines, isolates,
         note = f"**{EXPERIMENT.get(profile, 'profile ' + profile)}** (profile `{profile}`).\n\n" + note
     if "full" in present:
         rows, cols = table_baselines(runs, seeds, tests, [b for b in baselines if b in present])
-        open(os.path.join(out, "table_baselines.md"), "w").write(
+        open(os.path.join(out, "table_baselines.md"), "w", encoding="utf-8").write(
             banner + "# Table 1 - full vs baselines\n\n" + note +
             "greedy_oracle is handed the true service type: its translation columns are n/a. "
             "Setup latency = transport + translation + decision + network hops; service "
             "start-up time is excluded (an assumption, not a measurement).\n\n" + _md(rows, cols))
         rows, cols = table_ablations(runs, seeds, tests, [a for a in ablations if a in present],
                                      isolates)
-        open(os.path.join(out, "table_ablations.md"), "w").write(
+        open(os.path.join(out, "table_ablations.md"), "w", encoding="utf-8").write(
             banner + "# Table 2 - what each mechanism contributes\n\n" + note +
             "First row: the full system's absolute values. Other rows: quality as the "
             "difference from full in percentage points (negative = worse); cost as a ratio to "
