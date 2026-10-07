@@ -110,32 +110,44 @@ cases with the choices shuffled), then the full system on the quick
 workloads with that one model in both roles. Every probe call was fresh
 and every row reports its own served model file.
 
-| model | size | valid JSON | decisions acceptable / best choice | translation exact | full: accepted | new types accepted | calls / req | setup latency |
-|---|---|---|---|---|---|---|---|---|
-| Llama-3.2-1B | 1B | 17% | 8% / 5% | 52% | 86.7% | 67.8% | 0.50 | 211 ms |
-| Qwen2.5-1.5B | 1.5B | 100% | 92% / 49% | 71% | 91.9% | 93.3% | 0.25 | 79 ms |
-| Llama-3.2-3B | 3B | 100% | 100% / 59% | 71% | 91.5% | 96.4% | 0.24 | 84 ms |
-| Phi-3.5-mini | 3.8B | 100% | 100% / 74% | 89% | 91.7% | 85.3% | 0.26 | 138 ms |
-| Qwen2.5-7B | 7B | 100% | 100% / 75% | 75% | 89.1% | 76.4% | 0.28 | 152 ms |
-| Mistral-7B | 7B | 100% | 98% / 73% | 77% | 91.2% | 87.6% | 0.26 | 175 ms |
-| Gemma-2-9B | 9B | 100% | 100% / 80% | 91% | 91.5% | 80.8% | 0.25 | 187 ms |
-| Qwen2.5-14B | 14B | 100% | 100% / 81% | 94% | 91.6% | 80.6% | 0.24 | 206 ms |
-| main setup: Llama-3.2-3B (SLM) + Qwen2.5-7B (LLM) | 3B + 7B | | | | 92.0% | 96.9% | 0.24 | 126 ms |
+| model | size | valid JSON | decisions acceptable / best choice | translation exact | full: accepted | full: completed, correct type | new types accepted | calls / req | setup latency |
+|---|---|---|---|---|---|---|---|---|---|
+| Llama-3.2-1B | 1B | 17% | 8% / 5% | 52% | 86.7% | 60.1% | 67.8% | 0.50 | 211 ms |
+| Qwen2.5-1.5B | 1.5B | 100% | 92% / 49% | 71% | 91.9% | 83.0% | 93.3% | 0.25 | 79 ms |
+| Llama-3.2-3B | 3B | 100% | 100% / 59% | 71% | 91.5% | 78.6% | 96.4% | 0.24 | 84 ms |
+| Phi-3.5-mini | 3.8B | 100% | 100% / 74% | 89% | 91.7% | 83.6% | 85.3% | 0.26 | 138 ms |
+| Qwen2.5-7B | 7B | 100% | 100% / 75% | 75% | 89.1% | 76.7% | 76.4% | 0.28 | 152 ms |
+| Mistral-7B | 7B | 100% | 98% / 73% | 77% | 91.2% | 83.2% | 87.6% | 0.26 | 175 ms |
+| Gemma-2-9B | 9B | 100% | 100% / 80% | 91% | 91.5% | 84.4% | 80.8% | 0.25 | 187 ms |
+| Qwen2.5-14B | 14B | 100% | 100% / 81% | 94% | 91.6% | 85.6% | 80.6% | 0.24 | 206 ms |
+| main setup: Llama-3.2-3B (SLM) + Qwen2.5-7B (LLM) | 3B + 7B | | | | 92.0% | 78.9% | 96.9% | 0.24 | 126 ms |
+
+"Completed, correct type" counts a request only if the service that ran to
+the end is the one asked for: a mistranslated request can still be accepted,
+as the wrong service.
 
 - Phi-3.5 and Gemma-2 answer in valid JSON 100% of the time (system prompt
   folded into the user turn where the chat template drops it, plus JSON
   extraction from surrounding text).
-- From 1.5B upwards the full system reaches 89–92% acceptance at about 0.25
-  model calls/request: the cache and memory keep calls low whichever model
-  is used. Llama-3.2-1B is too small (17% valid decision JSON), so the
-  system falls back more often and needs twice the calls.
-- Larger models pick the preferred choice more often (80–81% for 9–14B,
-  49–59% for 1.5–3B) and translate more fields exactly, with little effect
-  on acceptance, because every offered choice is pre-verified.
-- With one large model in both roles, new-type acceptance is 76–81%,
-  against 93–97% when a small model translates. Not yet explained; to be
-  checked in the telemetry (how each model labels never-seen services)
-  before it is interpreted.
+- From 1.5B upwards the full system accepts 89–92% at about 0.25 model
+  calls/request: the cache and memory keep calls low whichever model is
+  used. Llama-3.2-1B is too small (17% valid decision JSON): the system
+  falls back more often and needs twice the calls.
+- Acceptance alone hides translation quality. Models that translate better
+  (Phi-3.5, Mistral, Gemma, Qwen-14B: 89–94% exact) complete 83–86% of
+  requests as the right service; the main setup's Llama-3.2-3B translator
+  reaches 79%. The main setup is the cheapest and fastest among the
+  well-performing ones (0.24 calls, 126 ms), not the most accurate; a
+  stronger translator would raise correct-type completion by about 5 points
+  at about 1.5–2.5× the setup latency.
+- New service types: the larger models recognise them more often (45.8%
+  of new-type requests typed correctly vs 26.8% for Llama-3.2-3B; some
+  labelled as a new type), and a correctly typed `crowd_safety` request
+  carries its real demand (critical, zone-local, 1.5× CPU, accelerator), so
+  fewer are placed: 76–81% accepted vs 93–97% when they are mistaken for a
+  smaller known type. The same effect explains CORE's and no_intent_cache's
+  edge on new types in medium (both type 54% of them correctly, full 35%:
+  the cache maps some new phrasings to a similar known type).
 
 The first sweep was invalid (every tier was served by Qwen2.5-1.5B; see
 ARCHITECTURE.md §11) and was discarded.

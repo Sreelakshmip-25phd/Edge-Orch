@@ -72,6 +72,7 @@ def _md(rows, cols):
 # --- tables -------------------------------------------------------------------------
 BASELINE_COLS = [  # (label, metric, scale, decimals)
     ("accepted %", "acceptance_rate", 100, 1),
+    ("completed, correct type %", "completed_correct_rate", 100, 1),
     ("new types accepted %", "new_type_acceptance", 100, 1),
     ("locality violations %", "locality_violation_rate", 100, 1),
     ("service type correct %", "translation_service_type_acc", 100, 1),
@@ -88,7 +89,8 @@ def table_baselines(runs, seeds, tests, baselines):
             continue
         r = {"system": "**full (proposed)**" if s == "full" else s}
         for lab, key, sc, nd in BASELINE_COLS:
-            if s in ORACLE_TYPED and key in ("translation_service_type_acc", "lat_setup_mean"):
+            if s in ORACLE_TYPED and key in ("translation_service_type_acc", "lat_setup_mean",
+                                             "completed_correct_rate"):
                 r[lab] = "n/a (given)"
                 continue
             m, h, _ = _ci(runs, s, seeds, key)
@@ -291,7 +293,10 @@ def write_main(out, runs, present, seeds, tests, ablations, baselines, isolates,
         rows, cols = table_baselines(runs, seeds, tests, [b for b in baselines if b in present])
         open(os.path.join(out, "table_baselines.md"), "w", encoding="utf-8").write(
             banner + "# Table 1 - full vs baselines\n\n" + note +
-            "greedy_oracle is handed the true service type: its translation columns are n/a. "
+            "\"Completed, correct type\" counts a request only if the service that ran to the "
+            "end is the one asked for (a mistranslated request can still be accepted, as the "
+            "wrong service). greedy_oracle is handed the true service type: its translation "
+            "columns are n/a. "
             "Setup latency = transport + translation + decision + network hops; service "
             "start-up time is excluded (an assumption, not a measurement).\n\n" + _md(rows, cols))
         rows, cols = table_ablations(runs, seeds, tests, [a for a in ablations if a in present],

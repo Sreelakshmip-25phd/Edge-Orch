@@ -36,14 +36,41 @@ def main():
     mc = os.path.join(RESULTS, "model_comparison", "model_comparison.csv")
     if os.path.exists(mc):
         df = pd.read_csv(mc)
+        sys.path.insert(0, os.path.join(BASE, "local_llm"))
+        import model_compare
+        model_compare.make_figure(df, os.path.join(out, "fig5_models.png"))
+        # end to end: the full system on the quick workloads with that one model in
+        # both roles (scripts/run_model_sweep.py), next to the probe scores
+        import glob
+        import json
+        e2e = {"accepted": "acceptance_rate", "completed_correct": "completed_correct_rate",
+               "new_types_accepted": "new_type_acceptance", "calls_per_req": "invocations_per_req",
+               "setup_ms": "lat_setup_mean"}
+        for col in e2e:
+            df["e2e_" + col] = None
+        for i, r in df.iterrows():
+            fs = glob.glob(os.path.join(RESULTS, f"quick__model_{r['model']}", "runs", "full",
+                                        "seed*.metrics.json"))
+            if not fs:
+                continue
+            sc = [json.load(open(f))["scalars"] for f in fs]
+            for col, key in e2e.items():
+                v = [x[key] for x in sc if x.get(key) is not None]
+                df.at[i, "e2e_" + col] = round(sum(v) / len(v), 3) if v else None
+            df.at[i, "e2e_seeds"] = len(fs)
         cols = [c for c in ("display_name", "params_b", "hosted_reference", "translation_accuracy",
                             "full_schema_exact_match", "reasoning_valid_json",
                             "reasoning_acceptable", "reasoning_preferred",
                             "translate_ms_mean", "translate_ms_p95", "decide_ms_mean",
-                            "decide_ms_p95", "tokens_in_per_call", "tokens_out_per_call")
+                            "decide_ms_p95", "tokens_in_per_call", "tokens_out_per_call",
+                            "e2e_seeds", "e2e_accepted", "e2e_completed_correct",
+                            "e2e_new_types_accepted", "e2e_calls_per_req", "e2e_setup_ms")
                 if c in df]
         open(os.path.join(out, "table_models.md"), "w", encoding="utf-8").write(
-            "# Table 3 - local models compared\n\n" + E._md_table(df.sort_values("params_b")[cols]))
+            "# Table 3 - local models compared\n\nProbe: 158 held-out translations and 100 "
+            "decision cases per model. e2e_*: the full system on the quick workloads with that "
+            "one model as both SLM and LLM (mean over e2e_seeds seeds).\n\n"
+            + E._md_table(df.sort_values("params_b")[cols]))
     print(f"wrote {out}")
 
 

@@ -179,34 +179,49 @@ def run_target(label, url, cases, items, limit=None):
 
 
 def make_figure(df, path):
+    """Two panels: quality per model, and per-call latency (bar = mean, line
+    up to p95; one-sided, latency has no lower tail to show)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
+    slots = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
     df = df.sort_values("params_b", na_position="last")
-    lab = [f"{d}{' *' if h else ''}" for d, h in zip(df.display_name, df.hosted_reference)]
+    hosted = df.hosted_reference.fillna(False).astype(bool)
+    lab = [f"{d}{' *' if h else ''}" for d, h in zip(df.display_name, hosted)]
     x = np.arange(len(df))
-    fig, ax = plt.subplots(1, 2, figsize=(15, 5))
+    fig, ax = plt.subplots(1, 2, figsize=(15, 5.4))
     for j, (col, name) in enumerate([("translation_accuracy", "translation (per field)"),
                                      ("full_schema_exact_match", "translation exact match"),
                                      ("reasoning_acceptable", "decision acceptable"),
                                      ("reasoning_preferred", "decision preferred")]):
-        ax[0].bar(x + (j - 1.5) * 0.2, df[col].fillna(0), 0.2, label=name)
-    ax[0].set_xticks(x)
-    ax[0].set_xticklabels(lab, rotation=30, ha="right", fontsize=8)
+        ax[0].bar(x + (j - 1.5) * 0.2, df[col].fillna(0), 0.18, label=name, color=slots[j])
     ax[0].set_ylim(0, 1.05)
-    ax[0].legend(fontsize=7)
-    ax[0].set_title("Quality (* = hosted reference, not a deployment candidate)", fontsize=9)
-    ax[1].bar(x - 0.2, df.translate_ms_mean.fillna(0), 0.4, label="translate mean",
-              yerr=(df.translate_ms_p95 - df.translate_ms_mean).clip(lower=0).fillna(0))
-    ax[1].bar(x + 0.2, df.decide_ms_mean.fillna(0), 0.4, label="decide mean",
-              yerr=(df.decide_ms_p95 - df.decide_ms_mean).clip(lower=0).fillna(0))
-    ax[1].set_xticks(x)
-    ax[1].set_xticklabels(lab, rotation=30, ha="right", fontsize=8)
-    ax[1].set_ylabel("ms (error bar to p95)")
-    ax[1].legend(fontsize=7)
+    ax[0].set_ylabel("share of probe items")
+    ax[0].set_title("Quality" + (" (* = hosted reference, not a deployment candidate)"
+                                 if hosted.any() else ""), fontsize=10, loc="left")
+    for j, (m, p95, name) in enumerate([("translate_ms_mean", "translate_ms_p95", "translate"),
+                                        ("decide_ms_mean", "decide_ms_p95", "decide")]):
+        mean = df[m].fillna(0).to_numpy()
+        up = (df[p95] - df[m]).clip(lower=0).fillna(0).to_numpy()
+        ax[1].bar(x + (j - 0.5) * 0.4, mean, 0.36, label=f"{name} (mean, line to p95)",
+                  color=slots[j], yerr=[np.zeros_like(up), up],
+                  error_kw=dict(elinewidth=0.8, ecolor="#52514e", capsize=0))
+    ax[1].set_ylim(bottom=0)
+    ax[1].set_ylabel("ms per call")
+    ax[1].set_title("Latency per call", fontsize=10, loc="left")
+    for a in ax:
+        a.set_xticks(x)
+        a.set_xticklabels(lab, rotation=30, ha="right", fontsize=8)
+        for side in ("top", "right"):
+            a.spines[side].set_visible(False)
+        a.grid(axis="y", color="#e4e3df", lw=0.6)
+        a.set_axisbelow(True)
+        a.legend(fontsize=8, frameon=False, ncol=2, loc="upper center",
+                 bbox_to_anchor=(0.5, -0.32))
     fig.tight_layout()
-    fig.savefig(path, dpi=200)
+    fig.savefig(path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
 
 
 def main(argv=None):

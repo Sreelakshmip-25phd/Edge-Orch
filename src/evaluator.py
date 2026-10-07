@@ -658,22 +658,32 @@ def figures(profile, runs, systems, seeds):
     axes[1].legend(fontsize=8)
     save(fig, "fig_latency.png")
 
-    # 4. Pareto: success vs latency vs tokens (LATS / AgentEdge style)
-    fig, ax = plt.subplots(figsize=(8, 5.5))
-    for s in systems:
+    # 4. Pareto: success vs latency vs tokens (LATS / AgentEdge style). Points
+    # are numbered and keyed beside the axes: many systems sit close together
+    # near full, and text labels on the points overlapped.
+    fig, (ax, kx) = plt.subplots(1, 2, figsize=(10, 5.5), gridspec_kw={"width_ratios": [3, 1.25]})
+    key = []
+    for i, s in enumerate(systems, 1):
         c = agg(s, "completion_rate")[0]
         lat = agg(s, "lat_setup_mean")[0]
         tok = agg(s, "tokens_per_req_all")[0] or 0
         if c is None or lat is None:
             continue
-        ax.scatter(lat, c, s=30 + np.sqrt(tok) * 6, color=COLORS[GROUP.get(s, "baseline")],
-                   alpha=0.7, edgecolor="black", lw=0.4)
-        ax.annotate(f"{s}\n{tok:.0f} tok/req", (lat, c), fontsize=7, xytext=(4, 4),
-                    textcoords="offset points")
+        ax.scatter(max(lat, 1.0), 100 * c, s=30 + np.sqrt(tok) * 6,
+                   color=COLORS[GROUP.get(s, "baseline")], alpha=0.75, edgecolor="white", lw=0.8)
+        ax.annotate(str(i), (max(lat, 1.0), 100 * c), fontsize=8, ha="center", va="center")
+        key.append(f"{i:>2}  {s}  ({tok:,.0f} tok/req)")
     ax.set_xscale("log")
-    ax.set_xlabel("mean setup latency excl. deployment (ms, log)")
-    ax.set_ylabel("completion rate")
-    ax.set_title("Success vs runtime vs token cost (bubble = tokens/request)" + tag, fontsize=9)
+    ax.set_xlabel("mean setup latency, excl. service start-up (ms, log)")
+    ax.set_ylabel("requests completed (%)")
+    ax.set_title("Completion vs setup latency (bubble area = tokens/request)" + tag, fontsize=9,
+                 loc="left")
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    ax.grid(color="#e4e3df", lw=0.6)
+    kx.axis("off")
+    kx.text(0, 1, "\n".join(key), va="top", ha="left", fontsize=8, family="monospace",
+            transform=kx.transAxes)
     save(fig, "fig_pareto.png")
 
     # 5. failures + pre-emption / degradation
