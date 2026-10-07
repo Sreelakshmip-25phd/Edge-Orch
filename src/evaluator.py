@@ -78,7 +78,8 @@ KEY_METRICS = ["acceptance_rate", "completion_rate", "escalation_success", "esca
                "translation_service_type_acc", "locality_violation_rate",
                "fail_rate_after_accept", "preempt_per_100req", "degrade_per_100req",
                "util_var_zones_mean", "cross_zone_share", "new_type_acceptance",
-               "acceptance_A", "acceptance_B", "acceptance_C", "cache_hit_shared_rate"]
+               "acceptance_A", "acceptance_B", "acceptance_C", "cache_hit_shared_rate",
+               "completed_correct_rate"]
 
 SEED_CACHE_PER_TYPE = 0          # cold start: the intent cache starts empty
 CACHE_CAP = 500

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Paper-ready results: results/<profile>/main/ (2 tables + 4 figures, see
-src/report.py) and, if it exists, the model comparison table.
+src/report.py) and, if it exists, the model comparison table and figure.
+The appendix (tables/, figures/) is rebuilt as well.
 
 Everything else (results/<profile>/tables, figures) is the appendix.
 Usage: python scripts/paper_results.py --profile full
@@ -29,6 +30,7 @@ def main():
     import pandas as pd
     import report
     import ablations
+    E.figures(a.profile, runs, systems, seeds)          # the appendix figures, rebuilt too
     tests = E.paired_tests(runs, systems, seeds, E.KEY_METRICS)
     out = report.write_main(os.path.join(results_dir(a.profile), "main"), runs, systems, seeds,
                             tests, E.ABLATIONS, E.BASELINES, ablations.ISOLATES, E.GROUP,
