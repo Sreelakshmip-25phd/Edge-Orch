@@ -103,13 +103,49 @@ LATS ran on one seed only: one quick seed takes 9.2 h on the RTX 4070 SUPER,
 against about 2.5 min for full. Seeds 1–2 can be added later; the LLM answers
 of the interrupted seed 1 are cached.
 
-## 5. Still to run
+## 5. Model comparison (8 local models; quick, 3 seeds)
 
-1. Model comparison (`scripts/run_model_sweep.py`): the 6 other local models
-   with latency calibration, then llama32_3b and medium with `--skip-latency`.
-2. `python scripts/paper_results.py --profile medium` and `--profile quick`.
+Per model: the probe (158 held-out translations, 100 auto-scored decision
+cases with the choices shuffled), then the full system on the quick
+workloads with that one model in both roles. Every probe call was fresh
+and every row reports its own served model file.
 
-## 6. Smoke run (mock LLM; NOT results)
+| model | size | valid JSON | decisions acceptable / best choice | translation exact | full: accepted | new types accepted | calls / req | setup latency |
+|---|---|---|---|---|---|---|---|---|
+| Llama-3.2-1B | 1B | 17% | 8% / 5% | 52% | 86.7% | 67.8% | 0.50 | 211 ms |
+| Qwen2.5-1.5B | 1.5B | 100% | 92% / 49% | 71% | 91.9% | 93.3% | 0.25 | 79 ms |
+| Llama-3.2-3B | 3B | 100% | 100% / 59% | 71% | 91.5% | 96.4% | 0.24 | 84 ms |
+| Phi-3.5-mini | 3.8B | 100% | 100% / 74% | 89% | 91.7% | 85.3% | 0.26 | 138 ms |
+| Qwen2.5-7B | 7B | 100% | 100% / 75% | 75% | 89.1% | 76.4% | 0.28 | 152 ms |
+| Mistral-7B | 7B | 100% | 98% / 73% | 77% | 91.2% | 87.6% | 0.26 | 175 ms |
+| Gemma-2-9B | 9B | 100% | 100% / 80% | 91% | 91.5% | 80.8% | 0.25 | 187 ms |
+| Qwen2.5-14B | 14B | 100% | 100% / 81% | 94% | 91.6% | 80.6% | 0.24 | 206 ms |
+| main setup: Llama-3.2-3B (SLM) + Qwen2.5-7B (LLM) | 3B + 7B | | | | 92.0% | 96.9% | 0.24 | 126 ms |
+
+- Phi-3.5 and Gemma-2 answer in valid JSON 100% of the time (system prompt
+  folded into the user turn where the chat template drops it, plus JSON
+  extraction from surrounding text).
+- From 1.5B upwards the full system reaches 89–92% acceptance at about 0.25
+  model calls/request: the cache and memory keep calls low whichever model
+  is used. Llama-3.2-1B is too small (17% valid decision JSON), so the
+  system falls back more often and needs twice the calls.
+- Larger models pick the preferred choice more often (80–81% for 9–14B,
+  49–59% for 1.5–3B) and translate more fields exactly, with little effect
+  on acceptance, because every offered choice is pre-verified.
+- With one large model in both roles, new-type acceptance is 76–81%,
+  against 93–97% when a small model translates. Not yet explained; to be
+  checked in the telemetry (how each model labels never-seen services)
+  before it is interpreted.
+
+The first sweep was invalid (every tier was served by Qwen2.5-1.5B; see
+ARCHITECTURE.md §11) and was discarded.
+
+## 6. Optional
+
+- LATS seeds 1–2 on quick (about 18 h).
+- `medium` seeds 5–9 (about 7.5 h), for 10 seeds in Experiment 1.
+
+## 7. Smoke run (mock LLM; NOT results)
 
 `python main.py --profile smoke` runs every system end to end on synthetic
 data with the mock LLM and placeholder latencies, in a few minutes. It shows
