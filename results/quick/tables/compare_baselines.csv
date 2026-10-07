@@ -1,0 +1,7 @@
+system,accepted,completed,escalation success,"accepted, last third",locality violations,model calls/req,tokens/req,setup latency
+greedy_oracle,-6.1 pp,-2.9 pp,+5.2 pp,-14.2 pp,+35.0 pp *,0.00x,0.00x,0.05x
+rule_based,-18.2 pp *,-15.0 pp *,-58.9 pp *,-33.3 pp *,-1.4 pp *,0.00x,0.00x,0.11x
+core,+0.6 pp,+0.1 pp,+1.5 pp,+1.4 pp,-0.5 pp,5.74x,4.36x,3.81x
+react,-18.8 pp *,-17.0 pp *,-42.1 pp *,-23.8 pp,+7.2 pp *,16.84x,40.38x,20.55x
+agentedge,-16.2 pp,-21.7 pp *,-9.1 pp,-20.4 pp,-1.5 pp *,25.03x,21.78x,22.17x
+lats,-7.0 pp,-4.3 pp,-16.3 pp,-13.4 pp,+8.9 pp,99.49x,241.49x,90.84x

@@ -1,0 +1,16 @@
+system,seed,split,preemptions,victim_migrated,victim_lost
+full,0,by:high,136,112,39
+full,0,victim:low,93,88,20
+full,0,victim:normal,68,45,25
+full,0,by:critical,31,24,9
+full,0,victim:high,6,3,3
+full,1,by:high,127,108,34
+full,1,victim:normal,131,109,39
+full,1,by:critical,35,26,11
+full,1,victim:high,9,3,6
+full,1,victim:low,22,22,0
+full,2,by:high,136,105,55
+full,2,victim:normal,108,75,48
+full,2,victim:low,68,63,26
+full,2,by:critical,52,39,29
+full,2,victim:high,12,6,10

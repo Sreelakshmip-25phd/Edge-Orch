@@ -2,7 +2,7 @@
 
 **Experiment 1 - main campaign: 6,000 requests over a 24 h day, 5 seeds** (profile `medium`).
 
-Mean ± 95% CI over seeds (seeds per system: full 5, no_memory 5, no_intent_cache 5, no_cache_sharing 5, no_preempt_degrade 5, no_zone_tier 5, no_cross_zone 5, greedy_oracle 5, rule_based 5, core 5). * = differs from full, paired t-test, Holm-corrected within this table, p < 0.05.
+Mean Â± 95% CI over seeds (seeds per system: full 5, no_memory 5, no_intent_cache 5, no_cache_sharing 5, no_preempt_degrade 5, no_zone_tier 5, no_cross_zone 5, greedy_oracle 5, rule_based 5, core 5). * = differs from full, paired t-test, Holm-corrected within this table, p < 0.05.
 
 First row: the full system's absolute values. Other rows: quality as the difference from full in percentage points (negative = worse); cost as a ratio to full (above 1.00x = the ablation needs more). no_zone_tier has no escalation success to compare: without zone agents every request counts as escalated, so the rate is over all requests rather than the hard ones.
 

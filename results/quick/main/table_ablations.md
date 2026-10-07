@@ -2,7 +2,7 @@
 
 **Experiment 2 - agentic baselines: 1,000 requests over a compressed 3 h day (compare numbers only within this experiment)** (profile `quick`).
 
-Mean ± 95% CI over seeds (seeds per system: full 3, no_memory 3, no_intent_cache 3, no_cache_sharing 3, no_preempt_degrade 3, no_zone_tier 3, no_cross_zone 3, greedy_oracle 3, rule_based 3, core 3, react 3, agentedge 3, lats 1). * = differs from full, paired t-test, Holm-corrected within this table, p < 0.05.
+Mean Â± 95% CI over seeds (seeds per system: full 3, no_memory 3, no_intent_cache 3, no_cache_sharing 3, no_preempt_degrade 3, no_zone_tier 3, no_cross_zone 3, greedy_oracle 3, rule_based 3, core 3, react 3, agentedge 3, lats 1). * = differs from full, paired t-test, Holm-corrected within this table, p < 0.05.
 
 First row: the full system's absolute values. Other rows: quality as the difference from full in percentage points (negative = worse); cost as a ratio to full (above 1.00x = the ablation needs more). no_zone_tier has no escalation success to compare: without zone agents every request counts as escalated, so the rate is over all requests rather than the hard ones.
 
