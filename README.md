@@ -19,7 +19,7 @@ the cache and memory fill, without the acceptance rate suffering.
 |---|---|---|
 | 1 edge devices | `src/edge_device.py` | send pure natural-language intent; move between zones |
 | 2 zone agents (one per zone) | `src/zone_agent.py` | translate intent (one cold intent cache shared by all zones, falling back to the SLM), place locally |
-| 3 global agent | `src/global_agent.py` | memory, then rules, then digest scan, then one LLM call that picks one of a list of pre-verified choices (place / pre-empt / degrade / reject) by id, then a fixed rule chain as a safety net |
+| 3 global agent | `src/global_agent.py` | memory, then rules, then digest scan, then one LLM call that picks one of a list of pre-verified choices (place / pre-empt / degrade / reject) by id, then a fixed rule chain as a safety net ,in case LLM is unavailable or makes invalid decisions repeatedly|
 
 ## Quick start
 
@@ -37,7 +37,7 @@ as such under `results/smoke/`.
 
 ```bash
 # 1. data: download (see src/data_foundation.py for the one-time Harvard
-#    Dataverse guestbook step) or copy from an existing checkout
+#    Dataverse guestbook step).
 python src/data_foundation.py --import-from ../agentic_edge_orchestration
 
 # 2. models
@@ -79,7 +79,7 @@ python scripts/run_parallel.py --workers 3 --slm llama32_3b --llm medium
 
 This starts N independent SLM+LLM server pairs and N evaluator shards; pick N
 so N copies of both models fit in GPU memory. Results are identical to a
-sequential run (ARCHITECTURE.md §13). Progress: `results/full/logs/shard*.log`.
+sequential run (ARCHITECTURE.md §13).
 Interrupting is safe: finished (system, seed) runs are kept, unfinished ones
 restart from scratch next time.
 
