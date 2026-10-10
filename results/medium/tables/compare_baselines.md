@@ -1,10 +1,10 @@
 # full vs baselines
 
-Each cell: the system's mean over seeds, then in brackets its difference from full in the same unit (percentage points for rates; calls, tokens or ms for costs). Negative = lower than full (worse for quality columns, except locality violations; cheaper for cost columns). * = paired t-test vs full significant after Holm correction within this table (p < 0.05). Setup latency = request arrival to placement; service start-up is not included.
+Each cell: the system's mean over seeds, then in brackets its difference from full in the same unit (percentage points for rates; calls, tokens or ms for costs). Negative = lower than full (worse for quality columns, except locality violations; cheaper for cost columns). * = paired t-test vs full significant after Holm correction within this table (p < 0.05). Setup latency = request arrival to placement; service start-up is not included. n/a (given type): greedy_oracle is handed the true service type, so it has no translation to compare; n/a (not comparable): without zone agents every request counts as escalated.
 
 | system | accepted | completed | completed, correct type | escalation success | accepted, last third | locality violations | model calls/req | tokens/req | setup latency |
 |---|---|---|---|---|---|---|---|---|---|
 | full | 91.2% | 89.0% | 79.0% | 78.4% | 87.0% | 0.6% | 0.139 | 136 | 83 ms |
-| greedy_oracle | 85.4% (-5.8 pp) * | 84.6% (-4.4 pp) * | 84.6% (+5.5 pp) * | 83.3% (+4.9 pp) * | 78.0% (-9.0 pp) * | 37.1% (+36.6 pp) * | 0.000 (-0.139) * | 0 (-136) * | 6 ms (-77) * |
+| greedy_oracle | 85.4% (-5.8 pp) * | 84.6% (-4.4 pp) * | n/a (given type) | 83.3% (+4.9 pp) * | 78.0% (-9.0 pp) * | 37.1% (+36.6 pp) * | 0.000 (-0.139) * | 0 (-136) * | n/a (given type) |
 | rule_based | 73.1% (-18.1 pp) * | 72.4% (-16.5 pp) * | 71.6% (-7.4 pp) * | 23.3% (-55.1 pp) * | 57.7% (-29.3 pp) * | 0.0% (-0.5 pp) * | 0.000 (-0.139) * | 0 (-136) * | 16 ms (-67) * |
 | core | 90.9% (-0.3 pp) | 88.1% (-0.8 pp) * | 79.1% (+0.1 pp) | 78.2% (-0.2 pp) | 86.7% (-0.3 pp) | 0.5% (-0.0 pp) | 1.429 (+1.290) * | 868 (+732) * | 457 ms (+374) * |
