@@ -267,19 +267,22 @@ def compute(tel, n_bins=24):
     tables["failure_causes"] = dict(causes)
 
     # --- (5) latency -----------------------------------------------------------------
+    # Only the orchestration path is reported: request arrival -> placement
+    # committed (network, translation, escalation, decision, cross-zone hop).
+    # Service start-up ("deployment") is an assumed per-device constant, not a
+    # measurement, so it stays in the event log but out of every metric.
     A = [r for r in R if r.accepted]
-    S.update({f"lat_total_{k}": v for k, v in _stats([r.total_latency_ms for r in A]).items()
-              if k != "n"})
-    comp_names = ("transport_in", "translation", "escalation", "decision", "cross_zone",
-                  "deployment")
-    for c in comp_names:
+
+    def setup(r):
+        return r.total_latency_ms - r.latency_breakdown.get("deployment", 0.0)
+
+    for c in ("transport_in", "translation", "escalation", "decision", "cross_zone"):
         S[f"lat_{c}_mean"] = float(np.mean([r.latency_breakdown.get(c, 0.0) for r in A])) if A else None
-    dec_lat = [r.total_latency_ms - r.latency_breakdown.get("deployment", 0.0) for r in A]
-    S.update({f"lat_setup_{k}": v for k, v in _stats(dec_lat).items() if k != "n"})
+    S.update({f"lat_setup_{k}": v for k, v in _stats([setup(r) for r in A]).items() if k != "n"})
     cmp = {
         "zone_vs_cross_zone": (
-            _stats([r.total_latency_ms for r in A if not r.cross_zone]),
-            _stats([r.total_latency_ms for r in A if r.cross_zone])),
+            _stats([setup(r) for r in A if not r.cross_zone]),
+            _stats([setup(r) for r in A if r.cross_zone])),
         "memory_vs_llm_decision": (
             _stats([r.latency_breakdown.get("decision", 0.0) for r in R
                     if r.decision_source in MEMORY_SOURCES]),

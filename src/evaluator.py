@@ -74,7 +74,7 @@ KEY_METRICS = ["acceptance_rate", "completion_rate", "escalation_success", "esca
                "llm_per_escalation_last_quarter", "llm_per_escalation_slope_per_bin",
                "memory_share_of_escalations", "cache_miss_first_quarter",
                "cache_miss_last_quarter",
-               "lat_total_mean", "lat_total_p95", "lat_setup_mean", "tokens_per_req_all",
+               "lat_setup_mean", "lat_setup_p95", "tokens_per_req_all",
                "translation_service_type_acc", "locality_violation_rate",
                "fail_rate_after_accept", "preempt_per_100req", "degrade_per_100req",
                "util_var_zones_mean", "cross_zone_share", "new_type_acceptance",
@@ -222,6 +222,28 @@ def run_one(ctx, name, seed, force=False):
         json.dump(m, f, indent=1, default=_json_default)   # file that looks finished
     os.replace(mp + ".tmp", mp)
     return m
+
+
+def recompute_metrics(profile, systems, seeds):
+    """Rebuild seed*.metrics.json from the saved event logs: what a changed
+    metrics.py needs, without re-simulating or calling any model. The run
+    metadata (system stats, LLM samples) is carried over from the log."""
+    done = 0
+    for name in systems:
+        d = run_dir(profile, name)
+        for k in seeds:
+            tp = os.path.join(d, f"seed{k}.telemetry.jsonl.gz")
+            if not os.path.exists(tp):
+                continue
+            tel = Telemetry.load(tp)
+            m = M.compute(tel)
+            m["meta"] = {kk: v for kk, v in tel.meta.items() if kk not in ("nodes", "workload")}
+            mp = os.path.join(d, f"seed{k}.metrics.json")
+            with open(mp + ".tmp", "w") as f:
+                json.dump(m, f, indent=1, default=_json_default)
+            os.replace(mp + ".tmp", mp)
+            done += 1
+    print(f"recomputed {done} metrics files from their event logs")
 
 
 def _json_default(o):
@@ -375,14 +397,15 @@ def aggregate(profile, systems, seeds):
 
 # Quality vs cost, reported separately for ablations (what each mechanism
 # contributes) and baselines (how the proposed system compares with other
-# approaches). Differences are system minus full (percentage points); cost
-# columns are ratios system / full, so e.g. "2.5x" calls = 2.5 times full's.
+# approaches). Every cell is the system's own mean over seeds, followed by its
+# difference from full in the same unit (percentage points for rates).
 QUALITY = [("acceptance_rate", "accepted"), ("completion_rate", "completed"),
+           ("completed_correct_rate", "completed, correct type"),
            ("escalation_success", "escalation success"),
            ("acceptance_C", "accepted, last third"),
            ("locality_violation_rate", "locality violations")]
-COST = [("invocations_per_req", "model calls/req"), ("tokens_per_req_all", "tokens/req"),
-        ("lat_setup_mean", "setup latency")]
+COST = [("invocations_per_req", "model calls/req", 3, ""), ("tokens_per_req_all", "tokens/req", 0, ""),
+        ("lat_setup_mean", "setup latency", 0, " ms")]
 
 
 def _group_table(runs, systems, seeds, tests):
@@ -390,22 +413,30 @@ def _group_table(runs, systems, seeds, tests):
         return ci95([runs[(s, i)]["scalars"].get(k) for i in seeds if (s, i) in runs])[0]
 
     pval = {(t["system"], t["metric"]): t.get("t_p_holm") for t in tests}
+
+    def star(s, k):
+        p = pval.get((s, k))
+        return " *" if p is not None and p < 0.05 else ""
+
     rows = []
     for s in systems:
-        if s == "full":
-            continue
         r = {"system": s}
         for k, lab in QUALITY:
             a, b = mean("full", k), mean(s, k)
-            if a is None or b is None:
+            if b is None:
                 r[lab] = "n/a"
-                continue
-            p = pval.get((s, k))
-            star = "" if p is None else (" *" if p < 0.05 else "")
-            r[lab] = f"{100 * (b - a):+.1f} pp{star}"
-        for k, lab in COST:
+            elif s == "full" or a is None:
+                r[lab] = f"{100 * b:.1f}%"
+            else:
+                r[lab] = f"{100 * b:.1f}% ({100 * (b - a):+.1f} pp){star(s, k)}"
+        for k, lab, nd, unit in COST:
             a, b = mean("full", k), mean(s, k)
-            r[lab] = "n/a" if not a or b is None else f"{b / a:.2f}x"
+            if b is None:
+                r[lab] = "n/a"
+            elif s == "full" or a is None:
+                r[lab] = f"{b:,.{nd}f}{unit}"
+            else:
+                r[lab] = f"{b:,.{nd}f}{unit} ({b - a:+,.{nd}f}){star(s, k)}"
         rows.append(r)
     return rows
 
@@ -414,11 +445,12 @@ def _write_group_comparisons(runs, systems, seeds, tests, tdir):
     import pandas as pd
     if "full" not in systems:
         return
-    head = ("Differences vs full: quality = system minus full in percentage points "
-            "(negative = worse than full, except locality violations where negative = "
-            "fewer); cost = system / full (above 1.00x = more expensive than full). "
-            "* = paired t-test vs full significant after Holm correction within this table "
-            "(p < 0.05).\n\n")
+    head = ("Each cell: the system's mean over seeds, then in brackets its difference from "
+            "full in the same unit (percentage points for rates; calls, tokens or ms for "
+            "costs). Negative = lower than full (worse for quality columns, except locality "
+            "violations; cheaper for cost columns). * = paired t-test vs full significant "
+            "after Holm correction within this table (p < 0.05). Setup latency = request "
+            "arrival to placement; service start-up is not included.\n\n")
     for group, members in (("ablations", ABLATIONS), ("baselines", BASELINES)):
         sel = [s for s in members if s in systems]
         if not sel:
@@ -479,6 +511,107 @@ def _write_breakdowns(runs, systems, seeds, tdir):
                 rows.append({"system": s, "seed": k, "zone": z, "placements": c})
     pd.DataFrame(rows).to_csv(os.path.join(tdir, "placements_per_zone.csv"), index=False)
     savings_vs_ablations(runs, systems, seeds, tdir)
+    _write_mean_tables(systems, tdir)
+
+
+LAT_CMP = {"cache_vs_slm_translation": ("translation", "cache hit", "SLM call"),
+           "memory_vs_llm_decision": ("decision", "memory", "LLM"),
+           "zone_vs_cross_zone": ("setup latency", "same zone", "cross-zone")}
+
+
+def _write_mean_tables(systems, tdir):
+    """Readable companions of the per-seed tables: one value per system (mean
+    over seeds), as <name>_mean.csv and .md. The per-seed files stay, since
+    every mean can be recomputed from them."""
+    import pandas as pd
+
+    def out(df, name, title, note=""):
+        df.to_csv(os.path.join(tdir, f"{name}.csv"), index=False)
+        shown = df.astype(object).where(df.notna(), "n/a")     # no such path for that system
+        with open(os.path.join(tdir, f"{name}.md"), "w", encoding="utf-8") as f:
+            f.write(f"# {title}\n\n" + (note + "\n\n" if note else "") + _md_table(shown))
+
+    def load(name):
+        p = os.path.join(tdir, f"{name}.csv")
+        return pd.read_csv(p) if os.path.exists(p) and os.path.getsize(p) > 1 else None
+
+    order = {s: i for i, s in enumerate(systems)}
+
+    # 1. every metric: rows = metrics, columns = systems
+    d = load("all_metrics_long")
+    if d is not None and len(d):
+        d["cell"] = [("" if pd.isna(m) else (f"{m:.4g}" if pd.isna(h) or not h
+                                             else f"{m:.4g} ± {h:.2g}"))
+                     for m, h in zip(d["mean"], d["ci95"])]
+        w = d.pivot(index="metric", columns="system", values="cell")
+        w = w[[s for s in systems if s in w.columns]].reset_index()
+        out(w, "all_metrics_mean", "Every metric, mean ± 95% CI over seeds",
+            "One row per metric, one column per system.")
+
+    # 2. model calls per request, hour by hour
+    d = load("calls_over_time")
+    if d is not None and len(d):
+        d["hour"] = (d["t_s"] / 3600.0).round(2)
+        num = [c for c in d.columns if c not in ("system", "seed", "bin", "t_s", "hour")]
+        m = d.groupby(["system", "bin", "hour"], as_index=False)[num].mean()
+        m = m.sort_values(["system", "bin"], key=lambda c: c.map(order) if c.name == "system" else c)
+        m.round(4).to_csv(os.path.join(tdir, "calls_over_time_mean.csv"), index=False)
+        w = m.pivot(index="hour", columns="system", values="invocations_per_request")
+        w = w[[s for s in systems if s in w.columns]].round(3).reset_index()
+        out(w, "calls_over_time_mean_invocations",
+            "Model calls (SLM + LLM) per request, per hour of the simulated day",
+            "Mean over seeds; hour = start of the bin. All columns per system and bin: "
+            "calls_over_time_mean.csv.")
+
+    # 3. placements per zone
+    d = load("placements_per_zone")
+    if d is not None and len(d):
+        w = d.groupby(["system", "zone"])["placements"].mean().unstack("zone")
+        w = w[sorted(w.columns, key=lambda z: int(str(z).lstrip("z") or 0))]
+        w["total"] = w.sum(axis=1)
+        w = w.loc[[s for s in systems if s in w.index]].round(0).astype(int).reset_index()
+        out(w, "placements_per_zone_mean", "Services placed per zone per day",
+            "Mean over seeds; a placement counts in the zone where the service ran.")
+
+    # 4. pre-emption by priority
+    d = load("preemption_by_priority")
+    if d is not None and len(d):
+        num = [c for c in d.columns if c not in ("system", "seed", "split")]
+        m = d.groupby(["system", "split"], as_index=False)[num].mean().round(1)
+        m = m.sort_values(["system", "split"], key=lambda c: c.map(order) if c.name == "system" else c)
+        out(m, "preemption_by_priority_mean", "Pre-emptions per day, by priority",
+            "Mean over seeds. by:<p> = pre-emptions made for a request of priority p; "
+            "victim:<p> = services of priority p that were evicted, and whether they were "
+            "moved elsewhere (migrated) or lost.")
+
+    # 5. the three latency comparisons
+    d = load("latency_comparisons")
+    if d is not None and len(d):
+        num = ["a_mean", "a_p95", "a_n", "b_mean", "b_p95", "b_n"]
+        m = d.groupby(["system", "comparison"], as_index=False)[num].mean()
+        rows = []
+        for _, r in m.iterrows():
+            what, la, lb = LAT_CMP.get(r["comparison"], (r["comparison"], "a", "b"))
+            rows.append({"system": r["system"], "comparison": what,
+                         "A": la, "A mean ms": round(r["a_mean"], 1), "A p95 ms": round(r["a_p95"], 1),
+                         "A requests": round(r["a_n"]),
+                         "B": lb, "B mean ms": round(r["b_mean"], 1), "B p95 ms": round(r["b_p95"], 1),
+                         "B requests": round(r["b_n"])})
+        m = pd.DataFrame(rows)
+        m = m.sort_values(["system", "comparison"], key=lambda c: c.map(order) if c.name == "system" else c)
+        out(m, "latency_comparisons_mean", "Latency with vs without each fast path",
+            "Mean over seeds of the per-run means and 95th percentiles; requests = per run. "
+            "Setup latency = request arrival to placement (service start-up not included).")
+
+    # 6. savings vs ablations, hour by hour
+    d = load("savings_vs_ablations_by_hour")
+    if d is not None and len(d):
+        m = d.groupby(["reference", "bin"], as_index=False)["savings"].mean()
+        w = (100 * m.pivot(index="bin", columns="reference", values="savings")).round(1)
+        w.columns = [f"saved vs {c} (%)" for c in w.columns]
+        out(w.reset_index().rename(columns={"bin": "hour bin"}), "savings_vs_ablations_by_hour_mean",
+            "Share of model calls full saves vs each ablation, per hour",
+            "Mean over seeds: 100 × (1 − full's calls / the ablation's calls) in that hour.")
 
 
 SAVINGS_REFS = ("no_memory", "no_intent_cache", "no_cache_sharing")
@@ -632,17 +765,17 @@ def figures(profile, runs, systems, seeds):
 
     # 3. latency: the three comparisons + component breakdown
     fig, axes = plt.subplots(1, 2, figsize=(15, 4.8))
-    comps = ["transport_in", "translation", "escalation", "decision", "cross_zone", "deployment"]
+    comps = ["transport_in", "translation", "escalation", "decision", "cross_zone"]
     bottom = np.zeros(len(systems))
     for c in comps:
         v = np.array([agg(s, f"lat_{c}_mean")[0] or 0 for s in systems])
         axes[0].bar(systems, v, bottom=bottom, label=c)
         bottom += v
-    axes[0].set_ylabel("mean latency of accepted requests (ms)")
+    axes[0].set_ylabel("mean setup latency of accepted requests (ms)")
     axes[0].tick_params(axis="x", rotation=40, labelsize=7)
     axes[0].legend(fontsize=7)
     axes[0].set_title("Latency components" + tag, fontsize=9)
-    labels = [("lat_zone_vs_cross_zone", "total: zone vs cross-zone"),
+    labels = [("lat_zone_vs_cross_zone", "setup: zone vs cross-zone"),
               ("lat_memory_vs_llm_decision", "decision: memory vs LLM"),
               ("lat_cache_vs_slm_translation", "translation: cache vs SLM")]
     ref = "full" if "full" in systems else systems[0]
@@ -758,6 +891,10 @@ def main(argv=None):
     ap.add_argument("--seeds", default=None, help="comma list; default = profile seeds")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--report-only", action="store_true")
+    ap.add_argument("--recompute-metrics", action="store_true",
+                    help="recompute every seed*.metrics.json from its saved event log "
+                         "(after a change to metrics.py; no simulation, no model calls), "
+                         "then rebuild the report")
     ap.add_argument("--shard", default="0/1",
                     help="i/N: run every N-th job starting at i (0-based); run the report "
                          "once afterwards with --report-only (scripts/run_parallel.py does this)")
@@ -767,7 +904,9 @@ def main(argv=None):
         raise SystemExit("--shard must be i/N with 0 <= i < N")
     systems = expand_systems(args.systems)
     seeds = [int(x) for x in args.seeds.split(",")] if args.seeds else PROFILES[args.profile]["seeds"]
-    if not args.report_only:
+    if args.recompute_metrics:
+        recompute_metrics(args.profile, systems, seeds)
+    elif not args.report_only:
         SB.build_workloads(args.profile, seeds)
         if SB.calibration(args.profile) is None:
             raise SystemExit("workload not calibrated yet - run src/calibrate_workload.py "

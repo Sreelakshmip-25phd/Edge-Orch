@@ -89,6 +89,7 @@ restart from scratch next time.
 python main.py --profile full --from 5 --force          # re-run evaluation + report
 python main.py --systems full,no_memory,react --seeds 0,1,2
 python src/evaluator.py --profile full --report-only    # rebuild tables/figures
+python src/evaluator.py --profile medium --recompute-metrics   # metrics.py changed: recompute from event logs, no model calls
 python src/calibrate_workload.py --profile full --force # re-derive the load factor K
 ```
 
@@ -100,7 +101,8 @@ python src/calibrate_workload.py --profile full --force # re-derive the load fac
 | `runs/<system>/seed<k>.telemetry.jsonl.gz` | the complete event log of one run |
 | `runs/<system>/seed<k>.metrics.json` | every metric, computed only from that log |
 | `main/` | **the main results**: `table_baselines.md`, `table_ablations.md`, `fig1_calls_over_time.png`, `fig2_quality_vs_cost.png`, `fig3_acceptance_by_phase.png`, `fig4_setup_latency.png` (see `src/report.py`) |
-| `tables/` | appendix: `summary.md/csv` (mean ± 95% CI), `paired_tests_vs_full.csv`, latency comparisons, calls over time, pre-emption by priority, placements per zone |
+| `tables/*_mean.md/csv` | appendix, one value per system (mean over seeds): every metric (`all_metrics_mean`), calls per hour, placements per zone, pre-emptions by priority, the three latency comparisons, savings per hour; `compare_*.md` give each system's exact values and its difference from full |
+| `tables/` | appendix, per seed: `summary.md/csv` (mean ± 95% CI), `paired_tests_vs_full.csv`, latency comparisons, calls over time, pre-emption by priority, placements per zone |
 | `figures/` | appendix: outcomes, calls over time, latency, Pareto (success × latency × tokens), failures/pre-emption, tokens, load balance |
 | `main/table_models.md` | model comparison, written by `scripts/paper_results.py` when it exists |
 
