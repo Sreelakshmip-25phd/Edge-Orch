@@ -418,12 +418,17 @@ def _group_table(runs, systems, seeds, tests):
         p = pval.get((s, k))
         return " *" if p is not None and p < 0.05 else ""
 
+    import report
     rows = []
     for s in systems:
         r = {"system": s}
         for k, lab in QUALITY:
             a, b = mean("full", k), mean(s, k)
-            if b is None:
+            if (s, k) in report.NOT_COMPARABLE:
+                r[lab] = "n/a (not comparable)"
+            elif s in report.ORACLE_TYPED and k == "completed_correct_rate":
+                r[lab] = "n/a (given type)"
+            elif b is None:
                 r[lab] = "n/a"
             elif s == "full" or a is None:
                 r[lab] = f"{100 * b:.1f}%"
@@ -431,7 +436,9 @@ def _group_table(runs, systems, seeds, tests):
                 r[lab] = f"{100 * b:.1f}% ({100 * (b - a):+.1f} pp){star(s, k)}"
         for k, lab, nd, unit in COST:
             a, b = mean("full", k), mean(s, k)
-            if b is None:
+            if s in report.ORACLE_TYPED and k == "lat_setup_mean":
+                r[lab] = "n/a (given type)"
+            elif b is None:
                 r[lab] = "n/a"
             elif s == "full" or a is None:
                 r[lab] = f"{b:,.{nd}f}{unit}"
@@ -450,7 +457,10 @@ def _write_group_comparisons(runs, systems, seeds, tests, tdir):
             "costs). Negative = lower than full (worse for quality columns, except locality "
             "violations; cheaper for cost columns). * = paired t-test vs full significant "
             "after Holm correction within this table (p < 0.05). Setup latency = request "
-            "arrival to placement; service start-up is not included.\n\n")
+            "arrival to placement; service start-up is not included. n/a (given type): "
+            "greedy_oracle is handed the true service type, so it has no translation to "
+            "compare; n/a (not comparable): without zone agents every request counts as "
+            "escalated.\n\n")
     for group, members in (("ablations", ABLATIONS), ("baselines", BASELINES)):
         sel = [s for s in members if s in systems]
         if not sel:
@@ -540,11 +550,11 @@ def _write_mean_tables(systems, tdir):
     # 1. every metric: rows = metrics, columns = systems
     d = load("all_metrics_long")
     if d is not None and len(d):
-        d["cell"] = [("" if pd.isna(m) else (f"{m:.4g}" if pd.isna(h) or not h
+        d["cell"] = [("n/a" if pd.isna(m) else (f"{m:.4g}" if pd.isna(h) or not h
                                              else f"{m:.4g} ± {h:.2g}"))
                      for m, h in zip(d["mean"], d["ci95"])]
         w = d.pivot(index="metric", columns="system", values="cell")
-        w = w[[s for s in systems if s in w.columns]].reset_index()
+        w = w[[s for s in systems if s in w.columns]].fillna("n/a").reset_index()
         out(w, "all_metrics_mean", "Every metric, mean ± 95% CI over seeds",
             "One row per metric, one column per system.")
 
