@@ -154,14 +154,11 @@ Capacity is reserved at decision time. Setup latency is reported, but it does
 not delay the service start in the simulation, because setup latency (ms–s)
 is small next to service lifetimes (minutes–hours).
 
-Only the **arrival** placement's container start counts towards a request's
+Only the **arrival** placement's start counts towards a request's
 latency. When a running service is re-placed (migration after pre-emption,
 recovery after a node failure), that deployment draw is recorded on the
 `migrate` event as `redeploy_ms`, together with the re-planning latency, and
-does not change the original request's breakdown. (Fixed after the first GPU
-seeds: earlier code charged every re-placement's deployment to the original
-request, slightly inflating total latency for interrupted services.)
-
+does not change the original request's breakdown.
 ## 5. Tier 2 details
 
 - **Cold start.** Every zone cache starts empty (`SEED_CACHE_PER_TYPE = 0`;
@@ -180,7 +177,7 @@ request, slightly inflating total latency for interrupted services.)
 
   | θ | hit rate (known types) | false-hit rate (unseen types) | precision |
   |---|---|---|---|
-  | 0.30 (old repo's choice) | 1.00 | **1.00** | 0.905 |
+  | 0.30  | 1.00 | **1.00** | 0.905 |
   | 0.60 | 0.80 | 0.27 | 0.975 |
   | **0.65 (chosen: lowest θ with precision ≥ 0.98)** | 0.65 | 0.09 | 0.990 |
   | 0.75 | 0.42 | 0.00 | 1.000 |
