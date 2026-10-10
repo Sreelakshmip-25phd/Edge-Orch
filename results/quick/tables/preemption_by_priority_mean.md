@@ -1,0 +1,58 @@
+# Pre-emptions per day, by priority
+
+Mean over seeds. by:<p> = pre-emptions made for a request of priority p; victim:<p> = services of priority p that were evicted, and whether they were moved elsewhere (migrated) or lost.
+
+| system | split | preemptions | victim_migrated | victim_lost |
+|---|---|---|---|---|
+| full | by:critical | 26.7 | 20.3 | 8.0 |
+| full | by:high | 117.7 | 98.0 | 34.7 |
+| full | victim:high | 6.0 | 2.0 | 4.0 |
+| full | victim:low | 19.0 | 18.7 | 0.3 |
+| full | victim:normal | 119.3 | 97.7 | 38.3 |
+| no_memory | by:critical | 28.7 | 24.3 | 8.0 |
+| no_memory | by:high | 106.7 | 90.7 | 25.0 |
+| no_memory | victim:high | 10.3 | 6.3 | 5.3 |
+| no_memory | victim:low | 13.0 | 13.0 | 0.0 |
+| no_memory | victim:normal | 112.0 | 95.7 | 27.7 |
+| no_intent_cache | by:critical | 32.3 | 23.3 | 10.3 |
+| no_intent_cache | by:high | 108.0 | 91.3 | 29.7 |
+| no_intent_cache | victim:high | 9.3 | 1.7 | 7.7 |
+| no_intent_cache | victim:low | 17.7 | 17.7 | 0.0 |
+| no_intent_cache | victim:normal | 113.3 | 95.3 | 32.3 |
+| no_cache_sharing | by:critical | 32.0 | 22.0 | 11.7 |
+| no_cache_sharing | by:high | 102.0 | 85.0 | 28.0 |
+| no_cache_sharing | victim:high | 9.7 | 2.7 | 7.7 |
+| no_cache_sharing | victim:low | 18.3 | 18.0 | 0.3 |
+| no_cache_sharing | victim:normal | 106.0 | 86.3 | 31.7 |
+| no_zone_tier | by:critical | 35.3 | 27.7 | 10.3 |
+| no_zone_tier | by:high | 127.3 | 108.0 | 39.0 |
+| no_zone_tier | victim:high | 7.3 | 1.7 | 5.7 |
+| no_zone_tier | victim:low | 19.3 | 19.0 | 0.3 |
+| no_zone_tier | victim:normal | 136.0 | 115.0 | 43.3 |
+| no_cross_zone | by:critical | 19.7 | 8.3 | 13.0 |
+| no_cross_zone | by:high | 69.7 | 22.3 | 52.7 |
+| no_cross_zone | victim:high | 7.0 | 2.0 | 5.0 |
+| no_cross_zone | victim:low | 13.3 | 11.3 | 2.7 |
+| no_cross_zone | victim:normal | 69.0 | 17.3 | 58.0 |
+| core | by:critical | 32.3 | 24.7 | 11.0 |
+| core | by:high | 110.0 | 89.3 | 37.3 |
+| core | victim:high | 11.3 | 5.3 | 6.7 |
+| core | victim:low | 14.0 | 14.0 | 0.0 |
+| core | victim:normal | 117.0 | 94.7 | 41.7 |
+| react | by:critical | 7.3 | 2.3 | 5.3 |
+| react | by:high | 13.3 | 6.7 | 7.3 |
+| react | by:normal | 4.3 | 4.0 | 1.3 |
+| react | victim:high | 2.3 | 0.0 | 2.3 |
+| react | victim:low | 13.0 | 9.0 | 6.0 |
+| react | victim:normal | 9.7 | 4.0 | 5.7 |
+| agentedge | by:critical | 56.3 | 36.3 | 30.0 |
+| agentedge | by:high | 180.0 | 134.3 | 85.0 |
+| agentedge | victim:high | 21.3 | 11.7 | 12.3 |
+| agentedge | victim:low | 108.0 | 94.7 | 37.3 |
+| agentedge | victim:normal | 107.0 | 64.3 | 65.3 |
+| lats | by:critical | 6.0 | 4.0 | 2.0 |
+| lats | by:high | 16.0 | 13.0 | 3.0 |
+| lats | by:normal | 8.0 | 8.0 | 0.0 |
+| lats | victim:high | 1.0 | 0.0 | 1.0 |
+| lats | victim:low | 23.0 | 23.0 | 0.0 |
+| lats | victim:normal | 6.0 | 2.0 | 4.0 |

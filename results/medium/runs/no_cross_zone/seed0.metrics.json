@@ -75,21 +75,17 @@
   "interrupted_but_completed": 207,
   "replans_after_failure": 70,
   "failure_recovery_rate": 0.6730769230769231,
-  "lat_total_mean": 1826.0357746526333,
-  "lat_total_p50": 1540.0926320853287,
-  "lat_total_p95": 4276.466689924629,
   "lat_transport_in_mean": 1.0,
   "lat_translation_mean": 13.00979027172363,
   "lat_escalation_mean": 11.646945033751207,
   "lat_decision_mean": 27.93356630630899,
   "lat_cross_zone_mean": 0.0,
-  "lat_deployment_mean": 1772.4454730408495,
   "lat_setup_mean": 53.590301611783815,
   "lat_setup_p50": 8.123200222849846,
   "lat_setup_p95": 424.80304087060813,
-  "lat_zone_vs_cross_zone_a_mean": 1826.0357746526333,
+  "lat_zone_vs_cross_zone_a_mean": 53.590301611783815,
   "lat_zone_vs_cross_zone_b_mean": null,
-  "lat_zone_vs_cross_zone_a_p95": 4276.466689924629,
+  "lat_zone_vs_cross_zone_a_p95": 424.80304087060813,
   "lat_zone_vs_cross_zone_b_p95": null,
   "lat_memory_vs_llm_decision_a_mean": 0.12503202626670618,
   "lat_memory_vs_llm_decision_b_mean": 562.9856163866674,
@@ -2557,9 +2553,9 @@
    "zone_vs_cross_zone": {
     "a": {
      "n": 5185,
-     "mean": 1826.0357746526333,
-     "p50": 1540.0926320853287,
-     "p95": 4276.466689924629
+     "mean": 53.590301611783815,
+     "p50": 8.123200222849846,
+     "p95": 424.80304087060813
     },
     "b": {
      "n": 0,

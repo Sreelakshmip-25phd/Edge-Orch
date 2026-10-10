@@ -1,0 +1,36 @@
+# Latency with vs without each fast path
+
+Mean over seeds of the per-run means and 95th percentiles; requests = per run. Setup latency = request arrival to placement (service start-up not included).
+
+| system | comparison | A | A mean ms | A p95 ms | A requests | B | B mean ms | B p95 ms | B requests |
+|---|---|---|---|---|---|---|---|---|---|
+| full | decision | memory | 0.1 | 0.3 | 1377 | LLM | 557.1 | 656.0 | 442 |
+| full | setup latency | same zone | 63.0 | 584.9 | 4582 | cross-zone | 185.9 | 657.2 | 890 |
+| full | translation | cache hit | 7.3 | 9.8 | 5891 | SLM call | 303.2 | 330.9 | 109 |
+| no_memory | decision | memory | n/a | n/a | 0 | LLM | 556.6 | 653.5 | 1808 |
+| no_memory | setup latency | same zone | 151.3 | 660.8 | 4638 | cross-zone | 637.8 | 748.3 | 787 |
+| no_memory | translation | cache hit | 7.3 | 9.8 | 5891 | SLM call | 304.2 | 332.1 | 109 |
+| no_intent_cache | decision | memory | 0.2 | 0.5 | 1356 | LLM | 555.6 | 653.5 | 445 |
+| no_intent_cache | setup latency | same zone | 347.5 | 880.2 | 4624 | cross-zone | 465.9 | 949.4 | 841 |
+| no_intent_cache | translation | cache hit | n/a | n/a | 0 | SLM call | 295.4 | 325.4 | 6000 |
+| no_cache_sharing | decision | memory | 0.1 | 0.3 | 1375 | LLM | 555.7 | 655.7 | 432 |
+| no_cache_sharing | setup latency | same zone | 94.0 | 594.3 | 4574 | cross-zone | 227.8 | 690.9 | 864 |
+| no_cache_sharing | translation | cache hit | 7.3 | 9.8 | 5224 | SLM call | 302.9 | 333.4 | 776 |
+| no_preempt_degrade | decision | memory | 0.1 | 0.3 | 564 | LLM | n/a | n/a | 0 |
+| no_preempt_degrade | setup latency | same zone | 13.9 | 10.9 | 4161 | cross-zone | 84.6 | 91.2 | 657 |
+| no_preempt_degrade | translation | cache hit | 7.3 | 9.8 | 5891 | SLM call | 301.7 | 330.9 | 109 |
+| no_zone_tier | decision | memory | 0.2 | 0.6 | 4635 | LLM | 557.0 | 653.3 | 554 |
+| no_zone_tier | setup latency | same zone | 150.6 | 648.5 | 2894 | cross-zone | 116.6 | 559.1 | 2557 |
+| no_zone_tier | translation | cache hit | 7.3 | 9.8 | 5892 | SLM call | 302.0 | 330.6 | 108 |
+| no_cross_zone | decision | memory | 0.1 | 0.2 | 596 | LLM | 558.8 | 655.2 | 265 |
+| no_cross_zone | setup latency | same zone | 54.7 | 482.1 | 5192 | cross-zone | n/a | n/a | 0 |
+| no_cross_zone | translation | cache hit | 7.3 | 9.8 | 5891 | SLM call | 303.2 | 334.3 | 109 |
+| greedy_oracle | decision | memory | n/a | n/a | 0 | LLM | n/a | n/a | 0 |
+| greedy_oracle | setup latency | same zone | 1.1 | 1.1 | 734 | cross-zone | 6.6 | 8.5 | 4388 |
+| greedy_oracle | translation | cache hit | n/a | n/a | 0 | SLM call | n/a | n/a | 0 |
+| rule_based | decision | memory | n/a | n/a | 0 | LLM | n/a | n/a | 0 |
+| rule_based | setup latency | same zone | 8.3 | 10.7 | 3896 | cross-zone | 74.9 | 87.2 | 489 |
+| rule_based | translation | cache hit | n/a | n/a | 0 | SLM call | n/a | n/a | 0 |
+| core | decision | memory | n/a | n/a | 0 | LLM | 556.7 | 654.3 | 1262 |
+| core | setup latency | same zone | 439.0 | 952.1 | 4557 | cross-zone | 547.4 | 965.9 | 897 |
+| core | translation | cache hit | n/a | n/a | 0 | SLM call | 295.4 | 325.4 | 6000 |
