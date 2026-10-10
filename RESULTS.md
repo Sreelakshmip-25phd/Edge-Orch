@@ -149,8 +149,7 @@ as the wrong service.
   edge on new types in medium (both type 54% of them correctly, full 35%:
   the cache maps some new phrasings to a similar known type).
 
-The first sweep was invalid (every tier was served by Qwen2.5-1.5B; see
-ARCHITECTURE.md §11) and was discarded.
+
 
 ## 6. Optional
 
