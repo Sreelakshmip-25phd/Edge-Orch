@@ -569,28 +569,4 @@ agrees, so it is reported but cannot decide. Holm correction is applied per
 metric within each table (the ablations; the baselines). Seeds 5–9 can be
 added to `medium` later without re-running anything.
 
-## 14. Known limitations
 
-- Services do not follow their user when the device moves. Mobility affects
-  only where new requests originate.
-- The global agent is a single logical instance; its own failure is not
-  modelled.
-- ReAct, LATS and AgentEdge prompts include the whole catalog and tool
-  observations, so their token costs depend on prompt design choices made
-  here. The prompts are in the source for inspection.
-- With the disk cache on, re-running a seed turns fresh calls into
-  `cached_disk` ones. Use invocation counts (fresh + cached_disk) for the
-  call-reduction claim, and fresh counts only for actual compute spent.
-- Model servers are modelled without a queue, and a decision's latency does
-  not delay the placement in simulated time: each request is decided at its
-  arrival instant, and every model call is charged its own sampled latency.
-  A real single GPU answers one call at a time. This favours the systems that
-  make many calls per request (LATS about 17, AgentEdge about 6, vs about 0.6
-  for full in the quick pilot): with a queue their waits, and so their
-  latency, would be larger.
-- Service start-up (deployment) time is an assumed constant per device class
-  (`device_specs.py`), not a measurement; it is excluded from the setup
-  latency used in the main results and reported only in the appendix.
-- Degradation floors and service priorities are design assumptions set in
-  the service catalog (`scenario.py`), standing in for what a service owner
-  would declare.
