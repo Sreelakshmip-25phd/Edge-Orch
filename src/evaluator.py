@@ -728,32 +728,53 @@ def figures(profile, runs, systems, seeds):
     ax.legend(fontsize=8)
     save(fig, "fig_outcomes.png")
 
-    # 2. call reduction over time (the central claim)
-    fig, axes = plt.subplots(1, 4, figsize=(22, 4.6))
-    for s in systems:
-        rows = [runs[(s, k)]["series"]["calls_by_bin"] for k in seeds if (s, k) in runs]
-        if not rows:
-            continue
-        hrs = np.array(rows[0]["edges_s"][:-1]) / 3600.0
-        style = dict(color=COLORS[GROUP.get(s, "baseline")],
-                     lw=2.4 if s == "full" else 1.0, alpha=1.0 if s == "full" else 0.6,
-                     label=s)
-        for ax, key in zip(axes, ("invocations_per_request", "cache_hit_rate", "escalation_rate",
-                                  "llm_per_escalation")):
-            if key not in rows[0]:
+    # 2. call reduction over time. Two rows - full vs the ablations, full vs
+    # the baselines - with one fixed colour per system (colouring by group made
+    # every ablation the same colour, so the lines could not be told apart).
+    from report import SLOT
+    panels = [("invocations_per_request", "model calls per request (SLM + LLM)"),
+              ("cache_hit_rate", "intent-cache hit rate"),
+              ("escalation_rate", "escalation rate"),
+              ("llm_per_escalation", "LLM calls per escalation")]
+    rows_def = [("full vs ablations", ["full"] + [s for s in ABLATIONS if s in systems]),
+                ("full vs baselines", ["full"] + [s for s in BASELINES if s in systems])]
+    rows_def = [(t, m) for t, m in rows_def if len(m) > 1]
+    fig, axes = plt.subplots(len(rows_def), 4, figsize=(22, 4.4 * len(rows_def)), squeeze=False)
+    for ri, (title, members) in enumerate(rows_def):
+        for si, s in enumerate(members):
+            rows = [runs[(s, k)]["series"]["calls_by_bin"] for k in seeds if (s, k) in runs]
+            if not rows:
                 continue
-            y = np.nanmean(np.array([[np.nan if v is None else v for v in r[key]] for r in rows],
-                                    float), axis=0)
-            ax.plot(hrs, y, **style)
-    axes[0].set_ylabel("SLM+LLM invocations per request")
-    axes[0].set_yscale("symlog", linthresh=1.0)
-    axes[1].set_ylabel("intent-cache hit rate")
-    axes[2].set_ylabel("escalation rate")
-    axes[3].set_ylabel("LLM invocations per escalation")
-    for ax in axes:
-        ax.set_xlabel("simulated hour")
-    axes[0].set_title("Model invocations per request over time" + tag, fontsize=9)
-    axes[3].legend(fontsize=6, ncol=2)
+            hrs = np.array(rows[0]["edges_s"][:-1]) / 3600.0
+            style = dict(color=SLOT[si % len(SLOT)], lw=2.6 if s == "full" else 1.4,
+                         label=s, zorder=3 if s == "full" else 2)
+            for ax, (key, _) in zip(axes[ri], panels):
+                if key not in rows[0]:
+                    continue
+                y = np.nanmean(np.array([[np.nan if v is None else v for v in r[key]]
+                                         for r in rows], float), axis=0)
+                if np.nanmax(np.nan_to_num(y)) == 0 and s != "full":
+                    continue        # no cache / no model calls: absent, not a line at 0
+                ax.plot(hrs, y, **style)
+        for ci, (ax, (key, lab)) in enumerate(zip(axes[ri], panels)):
+            ax.set_xlabel("simulated hour", fontsize=9)
+            ax.set_ylabel(lab, fontsize=9)
+            for side in ("top", "right"):
+                ax.spines[side].set_visible(False)
+            ax.grid(color="#e4e3df", lw=0.6)
+            top = max((np.nanmax(l.get_ydata()) for l in ax.get_lines()), default=0)
+            if key in ("invocations_per_request", "llm_per_escalation") and top > 5:
+                ax.set_yscale("log")             # e.g. LATS: tens of calls next to full's 0.1-0.3
+            if key == "cache_hit_rate":
+                ax.set_ylim(0, 1.05)
+                ax.annotate("systems without an intent cache are not shown",
+                            (0.02, 0.03), xycoords="axes fraction", fontsize=8, color="#52514e")
+        axes[ri][0].set_title(title + tag, fontsize=10, loc="left")
+        handles, labels = max((a.get_legend_handles_labels() for a in axes[ri]),
+                              key=lambda hl: len(hl[1]))   # the panel that shows every system
+        axes[ri][3].legend(handles, labels, fontsize=8, frameon=False, loc="upper left",
+                           bbox_to_anchor=(1.02, 1.0))
+    fig.tight_layout()
     save(fig, "fig_calls_over_time.png")
 
     # 2b. savings vs ablations per hour (causal view of the claim)
