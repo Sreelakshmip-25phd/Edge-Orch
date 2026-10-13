@@ -105,7 +105,7 @@ def main():
     ax0.set_xlim(-0.4, max(zero_x, 1) + 0.9)
     ax0.set_xticks([])
     ax0.set_xlabel("no model\ncalls", color=INK2, fontsize=9)
-    ax0.set_ylabel("requests (%)", color=INK2, fontsize=9)
+    ax0.set_ylabel("acceptance (%)", color=INK2, fontsize=9)
     ax1.set_xscale("log")
     ax1.set_xlim(0.1, 50)
     ax1.set_xlabel("model calls per request (log scale)", color=INK2, fontsize=9)
