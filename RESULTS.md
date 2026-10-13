@@ -126,9 +126,10 @@ and every row reports its own served model file.
 the end is the one asked for: a mistranslated request can still be accepted,
 as the wrong service.
 
-- Phi-3.5 and Gemma-2 answer in valid JSON 100% of the time (system prompt
-  folded into the user turn where the chat template drops it, plus JSON
-  extraction from surrounding text).
+- Every model from 1.5B up answers in valid JSON 100% of the time, including
+  Phi-3.5 and Gemma-2. For Gemma-2 and Mistral, whose chat templates drop the
+  system message, the system prompt is folded into the user turn; JSON is
+  extracted from surrounding text for all models.
 - From 1.5B upwards the full system accepts 89–92% at about 0.25 model
   calls/request: the cache and memory keep calls low whichever model is
   used. Llama-3.2-1B is too small (17% valid decision JSON): the system
@@ -138,8 +139,8 @@ as the wrong service.
   requests as the right service; the main setup's Llama-3.2-3B translator
   reaches 79%. The main setup is the cheapest and fastest among the
   well-performing ones (0.24 calls, 126 ms), not the most accurate; a
-  stronger translator would raise correct-type completion by about 5 points
-  at about 1.5–2.5× the setup latency.
+  stronger translator would raise correct-type completion by 4.3–6.7 points
+  at a setup latency of 138–206 ms instead of 126 ms (1.1–1.6×).
 - New service types: the larger models recognise them more often (45.8%
   of new-type requests typed correctly vs 26.8% for Llama-3.2-3B; some
   labelled as a new type), and a correctly typed `crowd_safety` request
