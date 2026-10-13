@@ -87,13 +87,11 @@ def main():
         if calls == 0:
             zero_x += 1
         ax.plot([x, x], [100 * val, 100 * acc], color=c, lw=0.8, ls=":", zorder=2)
-        ax.errorbar(x, 100 * acc, yerr=100 * acc_h, fmt="o", ms=7 if name == "full" else 6,
-                    color=c, mec="white", mew=0.8, ecolor=c, elinewidth=1, capsize=0, zorder=4,
+        ax.errorbar(x, 100 * acc, yerr=100 * acc_h, fmt="o", ms=9 if name == "full" else 7,
+                    color=c, mec="white", mew=1.0, ecolor=c, elinewidth=1, capsize=0, zorder=3,
                     label=None if group in seen else LEGEND[group])
         seen.add(group)
-        # ring larger than the dot and drawn underneath it: where accepted and
-        # locality-valid coincide (no violations) both stay visible
-        ax.errorbar(x, 100 * val, yerr=100 * val_h, fmt="o", ms=12, mfc="white", mec=c, mew=1.4,
+        ax.errorbar(x, 100 * val, yerr=100 * val_h, fmt="o", ms=6, mfc="white", mec=c, mew=1.3,
                     ecolor=c, elinewidth=0.8, capsize=0, zorder=3)
         print(f"{name:14s} n={n} calls/req={calls:.2f} accepted={100*acc:.1f}% "
               f"locality-valid={100*val:.1f}%")
@@ -117,8 +115,8 @@ def main():
     h, l = ax1.get_legend_handles_labels()
     h0, l0 = ax0.get_legend_handles_labels()
     from matplotlib.lines import Line2D
-    marks = [Line2D([], [], marker="o", ls="", color=INK2, mec="white", ms=6),
-             Line2D([], [], marker="o", ls="", mfc="white", mec=INK2, mew=1.4, ms=12)]
+    marks = [Line2D([], [], marker="o", ls="", color=INK2, mec="white", ms=7),
+             Line2D([], [], marker="o", ls="", mfc="white", mec=INK2, ms=6)]
     by = dict(zip(l0 + l, h0 + h))
     fig.legend(list(by.values()) + marks,
                list(by.keys()) + ["accepted", "locality-valid acceptance"],
