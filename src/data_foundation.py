@@ -10,14 +10,12 @@ missing. Sources, all independently, programmatically downloaded here:
   2. Milan activity trace  -> validated/milan_activity.parquet,
                                validated/milan_surge_candidates.csv
      Harvard Dataverse, doi:10.7910/DVN/EGZHFV (SMS-Call-Internet-MI)
-  3. EUA Melbourne topology -> validated/eua_melb_cbd_sites.csv
-     github.com/swinedge/eua-dataset (public, no auth)
-  4. Google cluster failures -> validated/failure_model.json
+  3. Google cluster failures -> validated/failure_model.json
      storage.googleapis.com/clusterdata-2011-2 (public, no auth)
-  5. RIPE Atlas RTT model  -> validated/rtt_model.json
+  4. RIPE Atlas RTT model  -> validated/rtt_model.json
      atlas.ripe.net API (public, no auth) for reachability +
      published metro-area anchor calibration constants
-  6. Alibaba resource profiles -> validated/service_resource_profiles.json
+  5. Alibaba resource profiles -> validated/service_resource_profiles.json
      Alibaba cluster-trace-v2018 OSS mirrors (public, no auth)
 
 ONE genuine external constraint, not fixable by any script: sources 1
@@ -283,31 +281,7 @@ def acquire_milan_activity():
         traceback.print_exc()
 
 
-# --- [3] EUA Melbourne topology -----------------------------------------
-EUA_URL = ("https://raw.githubusercontent.com/swinedge/eua-dataset/"
-          "master/edge-servers/site-optus-melbCBD.csv")
-
-
-def acquire_eua_topology():
-    if already_done("eua_topology", "eua_melb_cbd_sites.csv"):
-        return
-    try:
-        dest = os.path.join(RAW, "eua-site-optus-melbCBD.csv")
-        got = download(EUA_URL, dest)
-        if got is None:
-            record("eua_topology", "FAILED", error="download failed")
-            return
-        df = pd.read_csv(got)
-        assert len(df) > 0, "empty EUA file"
-        df.to_csv(os.path.join(VALIDATED, "eua_melb_cbd_sites.csv"), index=False)
-        record("eua_topology", "OK", n_sites=len(df),
-               output="validated/eua_melb_cbd_sites.csv")
-    except Exception as e:
-        record("eua_topology", "FAILED", error=str(e))
-        traceback.print_exc()
-
-
-# --- [4] Google cluster failure model ------------------------------------
+# --- [3] Google cluster failure model ------------------------------------
 GOOGLE_URL = ("https://storage.googleapis.com/clusterdata-2011-2/"
              "machine_events/part-00000-of-00001.csv.gz")
 GOOGLE_COLS = ["timestamp", "machine_id", "event_type", "platform_id",
@@ -368,7 +342,7 @@ def acquire_google_failures():
         traceback.print_exc()
 
 
-# --- [5] RIPE Atlas RTT model ---------------------------------------------
+# --- [4] RIPE Atlas RTT model ---------------------------------------------
 def acquire_ripe_rtt():
     if already_done("ripe_rtt", "rtt_model.json"):
         return
@@ -401,7 +375,7 @@ def acquire_ripe_rtt():
         traceback.print_exc()
 
 
-# --- [6] Alibaba resource profiles -----------------------------------------
+# --- [5] Alibaba resource profiles -----------------------------------------
 ALI_URLS = [
     "http://clusterdata2018pubus.oss-us-west-1.aliyuncs.com/batch_task.tar.gz",
     "http://aliopentrace.oss-cn-beijing.aliyuncs.com/v2018Traces/batch_task.tar.gz",
@@ -586,7 +560,7 @@ def sample_failures(n, rng, model=None):
 # --- import from an existing checkout -----------------------------------
 VALIDATED_FILES = ["milan_grid_centroids.csv", "milan_activity.parquet",
                    "milan_surge_candidates.csv", "service_resource_profiles.json",
-                   "eua_melb_cbd_sites.csv", "failure_model.json",
+                   "failure_model.json",
                    "rtt_model.json"]
 
 
@@ -636,7 +610,6 @@ def main(argv=None):
 
     acquire_milan_grid()
     acquire_milan_activity()
-    acquire_eua_topology()
     acquire_google_failures()
     acquire_ripe_rtt()
     acquire_resource_profiles()
@@ -657,7 +630,6 @@ def main(argv=None):
         "milan_grid": present("milan_grid_centroids.csv"),
         "milan_activity": present("milan_activity.parquet"),
         "resource_profiles": present("service_resource_profiles.json"),
-        "eua_topology": present("eua_melb_cbd_sites.csv"),
         "google_failures": present("failure_model.json"),
         "ripe_rtt": present("rtt_model.json"),
     }
